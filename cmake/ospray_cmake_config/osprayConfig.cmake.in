@@ -1,4 +1,4 @@
-## Copyright 2009-2019 Intel Corporation
+## Copyright 2009-2020 Intel Corporation
 ## SPDX-License-Identifier: Apache-2.0
 
 # Called if we failed to find OSPRay or any of it's required dependencies,
@@ -97,7 +97,7 @@ set(OSPRAY_ISPC_ADDRESSING     @OSPRAY_ISPC_ADDRESSING@)
 set(OSPRAY_TILE_SIZE      @OSPRAY_TILE_SIZE@)
 set(OSPRAY_PIXELS_PER_JOB @OSPRAY_PIXELS_PER_JOB@)
 
-set(OSPCOMMON_VERSION_REQUIRED @OSPCOMMON_VERSION_REQUIRED@)
+set(RKCOMMON_VERSION_REQUIRED @RKCOMMON_VERSION_REQUIRED@)
 set(EMBREE_VERSION_REQUIRED    @EMBREE_VERSION_REQUIRED@)
 set(OPENVKL_VERSION_REQUIRED   @OPENVKL_VERSION_REQUIRED@)
 
@@ -123,19 +123,24 @@ include(ospray_macros)
 
 if (OSPRAY_INSTALL_DEPENDENCIES)
   # Dependencies installed with OSPRay
-  file(GLOB_RECURSE EMBREE_LIBRARY    ${LIBRARY_PATH_PREFIX}embree*)
-  file(GLOB_RECURSE OSPCOMMON_LIBRARY ${LIBRARY_PATH_PREFIX}ospcommon*)
-  file(GLOB_RECURSE OPENVKL_LIBRARY   ${LIBRARY_PATH_PREFIX}openvkl*)
+  if (WIN32)
+    file(GLOB_RECURSE EMBREE_LIBRARY    ${LIBRARY_PATH_PREFIX}embree*.lib)
+    file(GLOB_RECURSE RKCOMMON_LIBRARY ${LIBRARY_PATH_PREFIX}rkcommon*.lib)
+    file(GLOB_RECURSE OPENVKL_LIBRARY   ${LIBRARY_PATH_PREFIX}openvkl*.lib)
+  else()
+    file(GLOB_RECURSE EMBREE_LIBRARY    ${LIBRARY_PATH_PREFIX}embree*)
+    file(GLOB_RECURSE RKCOMMON_LIBRARY ${LIBRARY_PATH_PREFIX}rkcommon*)
+    file(GLOB_RECURSE OPENVKL_LIBRARY   ${LIBRARY_PATH_PREFIX}openvkl*)
+  endif()
 else()
   # Find existing Dependencies on the machine
   if (NOT TARGET embree)
     ospray_find_embree(${EMBREE_VERSION_REQUIRED})
     ospray_verify_embree_features()
-    ospray_create_embree_target()
   endif()
 
-  if (NOT TARGET ospcommon::ospcommon)
-   find_dependency(ospcommon ${OSPCOMMON_VERSION_REQUIRED})
+  if (NOT TARGET rkcommon::rkcommon)
+   find_dependency(rkcommon ${RKCOMMON_VERSION_REQUIRED})
   endif()
 
   if (NOT TARGET openvkl::openvkl)
@@ -143,7 +148,7 @@ else()
   endif()
 
   set(EMBREE_LIBRARY embree)
-  set(OSPCOMMON_LIBRARY ospcommon::ospcommon)
+  set(RKCOMMON_LIBRARY rkcommon::rkcommon)
   set(OPENVKL_LIBRARY openvkl::openvkl)
 endif()
 
@@ -161,7 +166,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/ospray_Exports.cmake)
 
 # Add missing targets to libraries
 set_target_properties(ospray::ospray PROPERTIES
-  INTERFACE_LINK_LIBRARIES "${OSPCOMMON_LIBRARY}")
+  INTERFACE_LINK_LIBRARIES "${RKCOMMON_LIBRARY}")
 set_target_properties(ospray::ospray_module_ispc PROPERTIES
   INTERFACE_LINK_LIBRARIES "ospray::ospray;${OPENVKL_LIBRARY};${EMBREE_LIBRARY}")
 

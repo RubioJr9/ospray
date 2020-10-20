@@ -30,6 +30,9 @@ void SpherePrecision::SetUp()
   renderer.setParam("pixelSamples", 16);
   renderer.setParam("backgroundColor", vec4f(0.2f, 0.2f, 0.4f, 1.0f));
   if (rendererType == "scivis") {
+    renderer.setParam("shadows", true);
+    renderer.setParam("aoSamples", 16);
+  } else if (rendererType == "ao") {
     renderer.setParam("aoSamples", 16);
     renderer.setParam("aoIntensity", 1.f);
   } else if (rendererType == "pathtracer") {
@@ -47,12 +50,12 @@ void SpherePrecision::SetUp()
   std::vector<float> sph_radius = {
       radius, 0.9f * radius, 0.9f * radius, 10000.f * radius};
 
-  sphere.setParam("sphere.position", cpp::Data(sph_center));
-  sphere.setParam("sphere.radius", cpp::Data(sph_radius));
+  sphere.setParam("sphere.position", cpp::CopiedData(sph_center));
+  sphere.setParam("sphere.radius", cpp::CopiedData(sph_radius));
   sphere.commit();
 
-  inst_sphere.setParam("sphere.position", cpp::Data(vec3f(0.f)));
-  inst_sphere.setParam("sphere.radius", cpp::Data(90.f * radius));
+  inst_sphere.setParam("sphere.position", cpp::CopiedData(vec3f(0.f)));
+  inst_sphere.setParam("sphere.radius", cpp::CopiedData(90.f * radius));
   inst_sphere.commit();
 
   cpp::GeometricModel model1(sphere);
@@ -113,9 +116,9 @@ INSTANTIATE_TEST_SUITE_P(TestScenesGeometry,
                            "random_spheres",
                            "streamlines",
                            "subdivision_cube",
-                           "cornell_box_photometric",
-                           "planes"),
-        ::testing::Values("scivis", "pathtracer")));
+                           "planes",
+                           "unstructured_volume_isosurface"),
+        ::testing::Values("scivis", "pathtracer", "ao")));
 
 INSTANTIATE_TEST_SUITE_P(TestScenesClipping,
     FromOsprayTesting,
@@ -128,5 +131,18 @@ INSTANTIATE_TEST_SUITE_P(TestScenesClipping,
                            "clip_with_bspline_curves",
                            "clip_gravity_spheres_volume",
                            "clip_perlin_noise_volumes"),
-        ::testing::Values("scivis", "pathtracer")));
+        ::testing::Values("scivis", "pathtracer", "ao")));
+
+TEST_P(FromOsprayTestingMaxDepth, test_scenes)
+{
+  PerformRenderTest();
+}
+
+INSTANTIATE_TEST_SUITE_P(TestScenesMaxDepth,
+    FromOsprayTestingMaxDepth,
+    ::testing::Combine(
+        ::testing::Values(
+            "cornell_box", "clip_with_spheres", "clip_gravity_spheres_volume"),
+        ::testing::Values("ao")));
+
 } // namespace OSPRayTestScenes

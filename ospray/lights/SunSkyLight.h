@@ -4,10 +4,10 @@
 #pragma once
 
 #include "Light.h"
+#include "math/spectrum.h"
+#include "rkcommon/tasking/parallel_for.h"
 #include "sky_model/color_info.h"
 #include "sky_model/sky_model.h"
-#include "math/spectrum.h"
-#include "ospcommon/tasking/parallel_for.h"
 #include "texture/Texture2D.h"
 
 // Sun and sky environment lights
@@ -42,10 +42,6 @@ struct OSPRAY_SDK_INTERFACE SunSkyLight : public Light
   virtual utility::Optional<void *> getSecondIE() override;
 
  private:
-  vec3f direction; // direction of the sun
-  float turbidity{3.0f}; // turbidity must be between 1 and 10
-  float albedo; // albedo of the ground
-  vec3f up; // up direction of the sky
   std::vector<vec3f> skyImage;
   Texture2D *map{nullptr};
   void *secondLightIE;

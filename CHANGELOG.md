@@ -1,6 +1,121 @@
 Version History
 ---------------
 
+### Changes in v2.4.0:
+
+-   The pathtracer optionally allows for alpha blending even if the
+    background is seen through refractive objects like glass, by
+    enabling `backgroundRefraction`
+-   OSPRay now requires minimum Open VKL v0.11.0 to bring the following
+    improvements: 
+    -   Improved rendering performance of VDB volumes
+    -   Added support for configurable iterator depth via the
+        `maxIteratorDepth` parameters for unstructured and particle
+        volumes, improved performance
+    -   Added support for filter modes for structured volumes (regular
+        and spherical)
+-   Expose parameter `horizonExtension` of Sun-sky light, which extends
+    the sky dome by stretching the horizon over the lower hemisphere
+-   Optimize handling of geometry lights by the pathtracer
+-   The optional `denoiser` image operation now respects frame
+    cancellation, requiring Intel® Open Image Denoise with minimum
+    version 1.2.3
+-   Fixed normals of (transformed) isosurfaces
+-   Robust calculation of normals of `boxes` geometry
+-   Clipping geometry is now working correctly with `map_maxDepth`
+    renderer parameter
+-   Using materials in a renderer with a mismatched `renderer_type` no
+    longer causes crashes while rendering
+
+### Changes in v2.3.0:
+
+-   Re-add SciVis renderer features (the previous version is still
+    available as `ao` renderer)
+    -   Lights are regarded, and thus the OBJ material terms `ks` and
+        `ns` have effect again
+    -   Hard shadows are enabled via the `shadows` parameter
+    -   The control of ambient occlusion changed:
+        -   The `aoIntensity` parameter is replaced by the combined
+            intensity of ambient lights in the `World`
+        -   The effect range is controlled via `aoDistance`
+-   Added support for data arrays with a stride between voxels in
+    volumes
+-   Application thread waiting for finished image via `ospWait`
+    participates in rendering, increasing CPU utilization; via
+    rkcommon v1.5.0
+-   Added `ospray_cpp` compatibility headers for C++ wrappers to
+    understand rkcommon and glm short vector types
+    -   For rkcommon, include `ospray/ospray_cpp/ext/rkcommon.h`
+    -   For glm, include `ospray/ospray_cpp/ext/glm.h`
+    -   Note in debug builds some compilers will not optimize out type
+        trait definitions. This will require users to manually
+        instantiate the glm definitions in one translation unit within
+        the application using `#define OSPRAY_GLM_DEFINITIONS` before
+        including `ext/glm.h`: see `ospTutorialGLM` as an example
+-   Changed parameters to `volume` texture: it now directly accepts the
+    `volume` and the `transferFunction`
+-   Fixed many memory leaks
+-   Handle `NaN` during volume sampling, which led to bounding boxes
+    being visible for some volumes and settings
+-   Depth is now "accumulated" as well, using the minimum
+-   Fix shading for multiple modes of the `debug` renderer
+-   New minimum ISPC version is 1.14.1
+
+### Changes in v2.2.0:
+
+-   Support for texture transformation in SciVis OBJ material
+-   Add transformations for volume textures; volume texture lookups are
+    now with local object coordinates (not world coordinates anymore)
+-   Changed behavior: if solely a texture is given, then the default
+    value of the corresponding parameter is *not* multiplied
+-   Support for better antialiasing using a set of different pixel
+    filters (e.g, box, Gaussian, ...). The size of the pixel filter is
+    defined by the used filter type. Previously OSPRay implicitly used a
+    box filter with a size of 1, for better results the default filter
+    is now `OSP_PIXELFILTER_GAUSS`
+-   Support stereo3d mode for panoramic camera
+-   Add new camera `stereoMode` `OSP_STEREO_TOP_BOTTOM` (with left eye
+    at top half of the image)
+-   Added support for random light sampling to the `pathtracer`, the
+    number of sampled light sources per path vertex is defined by the
+    `lightSamples` parameter
+-   Support ring light by extending spot with `innerRadius`
+-   Fixed nonphysical behavior of the `spot` and `sphere` light sources
+    -   for area lights (when `radius > 0`) surfaces close to the light
+        will be darker
+    -   the `spot` now has an angular falloff, such that a disk light is
+        a proper lambertian area light, which leads to darker regions
+        perpendicular to its direction (thus barely visible with a
+        typically small `openingAngle`)
+-   Support for Open VKL v0.10.0 and its new sampler object API, thus
+    this is now the required minimum version
+-   Added support for particle and VDB volumes
+-   Move from `ospcommon` to `rkcommon` v1.4.2
+-   New minimum ISPC version is 1.10.0
+-   Status and error callbacks now support a user pointer
+-   Enabled C++ wrappers (`ospray_cpp`) to work with non-rkcommon math
+    types
+    -   Note that while the C API remains the same, the C++ wrappers
+        will require some application updates to account for these
+        changes
+-   Fix bug where `ospGetCurrentDevice` would crash if used before
+    `ospInit`
+-   Allow `NULL` handles to be passed to `ospDeviceRetain` and
+    `ospDeviceRelease`
+-   ISPC generated headers containing the exported functions for
+    OSPRay's ISPC types and functions are now distributed with the SDK
+-   Add CarPaint `flakeColor` parameter, defaults to current Aluminium
+-   Fixed Debug build (which were producing different images)
+-   The path tracer now also regards the renderer materialist when
+    creating geometry lights
+
+### Changes in v2.1.1:
+
+-   CarPaint material obeys `coat` weight parameter
+-   Correct depth buffer values with SciVis renderer
+-   Adaptions to Embree v3.10.0
+-   The Linux binary release finds `ospcommon` again
+
 ### Changes in v2.1.0:
 
 -   New clipping geometries feature that allows clipping any scene
@@ -15,7 +130,7 @@ Version History
 -   New plane geometry defined via plane equation and optional bounding
     box
 -   Sun-sky light based on physical model of Hošek-Wilkie
--   Support for photometric lights (e.g. IES or EULUMDAT)
+-   Support for photometric lights (e.g., IES or EULUMDAT)
 -   Add new `ospGetTaskDuration` API call to query execution time of
     asynchronous tasks
 -   Support for 16bit (unsigned short) textures
@@ -30,7 +145,7 @@ Version History
 -   Proper demonstration of `ospGetVariance` in `ospTutorialAsync`
 -   Fix handling of `--osp:device-params` to process and set all passed
     arguments first before committing the device, to ensure it is
-    committed in a valid state.
+    committed in a valid state
 -   Object factory functions are now registered during module
     initialization via the appropriate `registerType` function
 -   Fix issue with OSPRay ignoring tasking system thread count settings
@@ -51,7 +166,7 @@ Version History
 -   Add the option to specify a single color for geometric models
 -   The `scivis` renderer now respects the opacity component of `color`
     on geometric models
--   Fix various inconsistent handling of frame buffer alpha between
+-   Fix various inconsistent handling of framebuffer alpha between
     renderers
 -   `ospGetCurrentDevice` now increments the ref count of the returned
     `OSPDevice` handle, so applications will need to release the handle
@@ -71,7 +186,7 @@ Version History
         function parameters instead of setting some as renderer params
     -   `ospRenderFrame` is now asynchronous, where the task is managed
         through a returned `OSPFuture` handle
-    -   The heirarchy of objets in a scene are now more granular to
+    -   The hierarchy of objects in a scene are now more granular to
         aid in scene construction flexibility and reduce potential
         object duplication
     -   Type-specific parameter setting functions have been consolidated
@@ -110,7 +225,7 @@ Version History
     -   Any unused parameters an object ignores now emit a warning message
 -   New support for volumes in the `pathtracer`
     -   Several parameters are available for performance/quality
-        trade-offs for both photo-realistic and scientific visualization
+        trade-offs for both photorealistic and scientific visualization
         use cases
 -   Simplification of the SciVis renderer
     -   Fixed AO lighting and simple ray marched volume rendering for
@@ -136,16 +251,16 @@ Version History
     instead
 -   Triangle mesh and Quad mesh are superseded by the `mesh` geometry
 -   Applications need to use the various error reporting methods to
-    check wether the creation (via `ospNew...`) of objects failed; a
+    check whether the creation (via `ospNew...`) of objects failed; a
     returned `NULL` is not a special handle anymore to signify an error
 -   Changed module init methods to facilitate version checking:
     `extern "C" OSPError ospray_module_init_<name>(int16_t versionMajor, int16_t versionMinor, int16_t versionPatch)`
 -   The `map_backplate` texture is supported in all renderers and does
     not hide lights in infinity (like the HDRI light) anymore;
-    explicitely make lights in`visible` if this is needed
+    explicitly make lights in`visible` if this is needed
 -   Changed the computation of variance for adaptive accumulation to be
     independent of `TILE_SIZE`, thus `varianceThreshold` needs to be
-    adapted if using a different TILE_SIZE than default 64
+    adapted if using a different `TILE_SIZE` than default 64
 -   `OSPGeometricModel` now has the option to index a renderer-global material
     list that lives on the renderer, allowing scenes to avoid renderer-specific
     materials
@@ -788,7 +903,7 @@ changes.
 -   Incorporated early version of a new Qt-based viewer to eventually
     unify (and replace) the existing simpler GLUT-based viewers
 -   Added new path tracing renderer (`ospray/render/pathtracer`),
--   roughly based on the Embree sample path tracer
+    roughly based on the Embree sample path tracer
 -   Added new features to the volume renderer
     -   Gradient shading (lighting)
     -   Implicit isosurfacing

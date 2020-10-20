@@ -4,8 +4,7 @@
 // ospray
 #include "Data.h"
 #include "ospray/ospray.h"
-// ospcommon
-#include "ospcommon/utility/multidim_index_sequence.h"
+#include "rkcommon/utility/multidim_index_sequence.h"
 
 namespace ospray {
 
@@ -138,6 +137,11 @@ void Data::copy(const Data &source, const vec3ul &destinationIndex)
       memcpy(dst, src, sizeOf(type));
     }
   }
+}
+
+bool Data::isShared() const
+{
+  return shared;
 }
 
 std::string Data::toString() const

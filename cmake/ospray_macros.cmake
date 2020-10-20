@@ -201,10 +201,36 @@ endmacro()
 
 ## Target creation macros ##
 
+set(OSPRAY_SIGN_FILE_ARGS -q)
+if (APPLE)
+  list(APPEND OSPRAY_SIGN_FILE_ARGS -o runtime -e ${CMAKE_SOURCE_DIR}/scripts/release/ospray.entitlements)
+endif()
+
+macro(ospray_sign_target name)
+  if (OSPRAY_SIGN_FILE)
+    if (APPLE)
+      # on OSX we strip manually before signing instead of setting CPACK_STRIP_FILES
+      add_custom_command(TARGET ${name} POST_BUILD
+        COMMAND ${CMAKE_STRIP} -x $<TARGET_FILE:${name}>
+        COMMAND ${OSPRAY_SIGN_FILE} ${OSPRAY_SIGN_FILE_ARGS} $<TARGET_FILE:${name}>
+        COMMENT "Stripping and signing target"
+        VERBATIM
+      )
+    else()
+      add_custom_command(TARGET ${name} POST_BUILD
+        COMMAND ${OSPRAY_SIGN_FILE} ${OSPRAY_SIGN_FILE_ARGS} $<TARGET_FILE:${name}>
+        COMMENT "Signing target"
+        VERBATIM
+      )
+    endif()
+  endif()
+endmacro()
+
 macro(ospray_install_library name component)
   set_target_properties(${name}
     PROPERTIES VERSION ${OSPRAY_VERSION} SOVERSION ${OSPRAY_SOVERSION})
   ospray_install_target(${name} ${component})
+  ospray_sign_target(${name})
 endmacro()
 
 macro(ospray_install_target name component)
@@ -331,35 +357,32 @@ function(ospray_verify_embree_features)
   ospray_check_embree_feature(BACKFACE_CULLING "backface culling" OFF)
 endfunction()
 
-macro(ospray_create_embree_target)
-  if (NOT TARGET embree)
-    add_library(embree INTERFACE) # NOTE(jda) - Cannot be IMPORTED due to CMake
-                                  #             issues found on Ubuntu.
-
-    target_include_directories(embree
-    INTERFACE
-      $<BUILD_INTERFACE:${EMBREE_INCLUDE_DIRS}>
-    )
-
-    target_link_libraries(embree
-    INTERFACE
-      $<BUILD_INTERFACE:${EMBREE_LIBRARY}>
-    )
-  endif()
-endmacro()
-
 macro(ospray_find_embree EMBREE_VERSION_REQUIRED)
   find_dependency(embree ${EMBREE_VERSION_REQUIRED})
-  if(NOT DEFINED EMBREE_INCLUDE_DIRS)
+  if (NOT embree_FOUND)
     message(FATAL_ERROR
             "We did not find Embree installed on your system. OSPRay requires"
             " an Embree installation >= v${EMBREE_VERSION_REQUIRED}, please"
             " download and extract Embree (or compile Embree from source), then"
             " set the 'embree_DIR' variable to the installation (or build)"
             " directory.")
-  else()
-    message(STATUS "Found Embree v${EMBREE_VERSION}: ${EMBREE_LIBRARY}")
   endif()
+  if (TARGET embree)
+    get_target_property(EMBREE_INCLUDE_DIRS embree
+      INTERFACE_INCLUDE_DIRECTORIES)
+    get_target_property(CONFIGURATIONS embree IMPORTED_CONFIGURATIONS)
+    list(GET CONFIGURATIONS 0 CONFIGURATION)
+    get_target_property(EMBREE_LIBRARY embree
+        IMPORTED_LOCATION_${CONFIGURATION})
+  else()
+    add_library(embree INTERFACE) # NOTE(jda) - Cannot be IMPORTED due to CMake
+                                  #             issues found on Ubuntu.
+    target_include_directories(embree
+        INTERFACE $<BUILD_INTERFACE:${EMBREE_INCLUDE_DIRS}>)
+    target_link_libraries(embree
+       INTERFACE $<BUILD_INTERFACE:${EMBREE_LIBRARY}>)
+  endif()
+  message(STATUS "Found Embree v${embree_VERSION}: ${EMBREE_LIBRARY}")
 endmacro()
 
 macro(ospray_determine_embree_isa_support)
@@ -427,13 +450,12 @@ macro(ospray_find_openvkl OPENVKL_VERSION_REQUIRED)
             " an Open VKL installation >= v${OPENVKL_VERSION_REQUIRED}, please"
             " download and extract Open VKL (or compile from source), then"
             " set the 'openvkl_DIR' variable to the installation directory.")
-  else()
-    get_target_property(OPENVKL_INCLUDE_DIRS openvkl::openvkl
-        INTERFACE_INCLUDE_DIRECTORIES)
-    get_target_property(CONFIGURATIONS openvkl::openvkl IMPORTED_CONFIGURATIONS)
-    list(GET CONFIGURATIONS 0 CONFIGURATION)
-    get_target_property(OPENVKL_LIBRARY openvkl::openvkl
-        IMPORTED_LOCATION_${CONFIGURATION})
-    message(STATUS "Found Open VKL: ${OPENVKL_LIBRARY}")
   endif()
+  get_target_property(OPENVKL_INCLUDE_DIRS openvkl::openvkl
+      INTERFACE_INCLUDE_DIRECTORIES)
+  get_target_property(CONFIGURATIONS openvkl::openvkl IMPORTED_CONFIGURATIONS)
+  list(GET CONFIGURATIONS 0 CONFIGURATION)
+  get_target_property(OPENVKL_LIBRARY openvkl::openvkl
+      IMPORTED_LOCATION_${CONFIGURATION})
+  message(STATUS "Found Open VKL v${openvkl_VERSION}: ${OPENVKL_LIBRARY}")
 endmacro()

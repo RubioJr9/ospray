@@ -35,11 +35,10 @@
 #include <algorithm>
 #include <functional>
 #include <map>
-// ospcommon
-#include "ospcommon/tasking/tasking_system_init.h"
-#include "ospcommon/utility/CodeTimer.h"
+#include "rkcommon/tasking/tasking_system_init.h"
+#include "rkcommon/utility/CodeTimer.h"
 
-#include "ISPCDevice_ispc.h"
+#include "api/ISPCDevice_ispc.h"
 
 extern "C" RTCDevice ispc_embreeDevice()
 {
@@ -221,12 +220,17 @@ void ISPCDevice::commit()
       break;
     }
 
-    vklDriverSetErrorFunc(driver, [](VKLError, const char *message) {
-      handleError(OSP_UNKNOWN_ERROR, message);
-    });
+    vklDriverSetErrorCallback(driver,
+        [](void *, VKLError, const char *message) {
+          handleError(OSP_UNKNOWN_ERROR, message);
+        },
+        nullptr);
 
-    vklDriverSetLogFunc(driver,
-        [](const char *message) { postStatusMsg(OSP_LOG_INFO) << message; });
+    vklDriverSetLogCallback(driver,
+        [](void *, const char *message) {
+          postStatusMsg(OSP_LOG_INFO) << message;
+        },
+        nullptr);
 
     vklDriverSetInt(driver, "logLevel", logLevel);
     vklDriverSetInt(driver, "numThreads", numThreads);

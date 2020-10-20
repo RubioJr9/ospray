@@ -51,7 +51,7 @@ install(FILES
  ${PROJECT_SOURCE_DIR}/third-party-programs-Embree.txt
  ${PROJECT_SOURCE_DIR}/third-party-programs-OpenVKL.txt
  ${PROJECT_SOURCE_DIR}/third-party-programs-OIDN.txt
- ${PROJECT_SOURCE_DIR}/third-party-programs-DNNL.txt
+ ${PROJECT_SOURCE_DIR}/third-party-programs-oneDNN.txt
  ${PROJECT_SOURCE_DIR}/CHANGELOG.md
  ${PROJECT_SOURCE_DIR}/README.md
  DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT lib)
@@ -65,10 +65,12 @@ set(CPACK_PACKAGE_NAME "OSPRay")
 set(CPACK_PACKAGE_FILE_NAME "ospray-${OSPRAY_VERSION}.x86_64")
 #set(CPACK_PACKAGE_ICON ${PROJECT_SOURCE_DIR}/ospray-doc/images/icon.png)
 #set(CPACK_PACKAGE_RELOCATABLE TRUE)
-set(CPACK_STRIP_FILES TRUE) # do not disable, stripping symbols is important for security reasons
-if (APPLE)
-  # needs this to properly strip and sign under MacOSX
-  set(CMAKE_STRIP "${PROJECT_SOURCE_DIR}/scripts/release/macosx_strip+sign.sh")
+if (APPLE AND OSPRAY_SIGN_FILE)
+  # on OSX we strip files during signing
+  set(CPACK_STRIP_FILES FALSE)
+else()
+  # do not disable, stripping symbols is important for security reasons
+  set(CPACK_STRIP_FILES TRUE)
 endif()
 
 set(CPACK_PACKAGE_VERSION_MAJOR ${OSPRAY_VERSION_MAJOR})
@@ -85,19 +87,15 @@ set(CPACK_COMPONENT_DEVEL_DISPLAY_NAME "Development")
 set(CPACK_COMPONENT_DEVEL_DESCRIPTION "Header files for C and C++ required to develop applications with OSPRay.")
 
 set(CPACK_COMPONENT_APPS_DISPLAY_NAME "Applications")
-set(CPACK_COMPONENT_APPS_DESCRIPTION "Example and viewer applications and tutorials demonstrating how to use OSPRay.")
+set(CPACK_COMPONENT_APPS_DESCRIPTION "Example, viewer and test applications as well as tutorials demonstrating how to use OSPRay.")
 
 set(CPACK_COMPONENT_REDIST_DISPLAY_NAME "Redistributables")
 set(CPACK_COMPONENT_REDIST_DESCRIPTION "Dependencies of OSPRay (such as Embree, TBB, imgui) that may or may not be already installed on your system.")
-
-set(CPACK_COMPONENT_TEST_DISPLAY_NAME "Test Suite")
-set(CPACK_COMPONENT_TEST_DESCRIPTION "Tools for testing the correctness of various aspects of OSPRay.")
 
 # dependencies between components
 set(CPACK_COMPONENT_DEVEL_DEPENDS lib)
 set(CPACK_COMPONENT_APPS_DEPENDS lib)
 set(CPACK_COMPONENT_LIB_REQUIRED ON) # always install the libs
-set(CPACK_COMPONENT_TEST_DEPENDS lib)
 
 # point to readme and license files
 set(CPACK_RESOURCE_FILE_README ${PROJECT_SOURCE_DIR}/README.md)
@@ -107,9 +105,6 @@ if (OSPRAY_ZIP_MODE)
   set(CPACK_MONOLITHIC_INSTALL ON)
 else()
   set(CPACK_COMPONENTS_ALL lib devel apps)
-  if (OSPRAY_ENABLE_TESTING)
-    list(APPEND CPACK_COMPONENTS_ALL test)
-  endif()
 endif()
 
 
@@ -174,7 +169,6 @@ else() # Linux specific settings
       set(CPACK_RPM_lib_PACKAGE_REQUIRES ${OSPLIB_REQS})
       set(CPACK_RPM_apps_PACKAGE_REQUIRES "ospray-lib >= ${OSPRAY_VERSION}")
       set(CPACK_RPM_devel_PACKAGE_REQUIRES "ospray-lib = ${OSPRAY_VERSION}, ispc >= ${ISPC_VERSION_REQUIRED}")
-      set(CPACK_RPM_test_PACKAGE_REQUIRES "ospray-lib = ${OSPRAY_VERSION}")
     endif()
 
     set(CPACK_RPM_PACKAGE_RELEASE 1)

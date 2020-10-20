@@ -57,7 +57,7 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   common/Instance.ispc
   common/Managed.cpp
   common/OSPCommon.ispc
-  common/Util.h
+  common/World.ih
   common/World.ispc
   common/World.cpp
 
@@ -80,6 +80,12 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   fb/tile_ops/SaveTiles.cpp
   fb/tile_ops/ToneMapper.cpp
   fb/tile_ops/ToneMapper.ispc
+
+  pf/PixelFilter.ih
+  pf/PixelFilter.ispc
+  pf/LUTPixelFilter.ih
+  pf/LUTPixelFilter.ispc
+  pf/PixelFilter.cpp
 
   camera/Camera.cpp
   camera/Camera.ispc
@@ -137,6 +143,9 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   math/spectrum.h
   math/spectrum.ih
   math/spectrum.ispc
+  math/random.ih
+  math/halton.ih
+  math/halton.ispc
 
   render/LoadBalancer.cpp
   render/Material.cpp
@@ -148,12 +157,20 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   render/debug/DebugRenderer.cpp
   render/debug/DebugRenderer.ispc
 
+  render/ao/AORenderer.cpp
+  render/ao/AORenderer.ispc
+  render/ao/Material.cpp
+  render/ao/Material.ispc
+  render/ao/surfaces.ispc
+  render/ao/volumes.ispc
+
   render/scivis/SciVis.cpp
   render/scivis/SciVis.ispc
   render/scivis/SciVisMaterial.cpp
   render/scivis/SciVisMaterial.ispc
   render/scivis/surfaces.ispc
   render/scivis/volumes.ispc
+  render/scivis/lightAlpha.ispc
 
   render/pathtracer/PathTracer.ispc
   render/pathtracer/PathTracer.cpp
@@ -196,6 +213,7 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   texture/Texture2D.ispc
   texture/TextureVolume.cpp
   texture/TextureVolume.ispc
+  texture/TextureParam.ispc
   texture/registration.cpp
 
   volume/Volume.ispc
@@ -225,6 +243,12 @@ foreach(dir ${SUBDIRS})
       PATTERN *.h
       PATTERN *.ih
     )
+    install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${dir}
+      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ospray/SDK
+      COMPONENT devel
+      FILES_MATCHING
+      PATTERN *_ispc.h
+    )
   endif()
 endforeach()
 
@@ -233,7 +257,7 @@ endforeach()
 ##############################################################
 
 add_library(ospray SHARED ${OSPRAY_SOURCES})
-target_link_libraries(ospray PUBLIC $<BUILD_INTERFACE:ospcommon::ospcommon>)
+target_link_libraries(ospray PUBLIC $<BUILD_INTERFACE:rkcommon::rkcommon>)
 ospray_install_library(ospray lib)
 
 target_include_directories(ospray
@@ -327,7 +351,7 @@ if(OSPRAY_BUILD_ISPC_DEVICE)
   target_link_libraries(ospray_module_ispc
   PUBLIC
     ospray
-    ospcommon::ospcommon
+    rkcommon::rkcommon
     $<BUILD_INTERFACE:embree>
     $<BUILD_INTERFACE:openvkl::openvkl>
   )
@@ -362,7 +386,7 @@ endif()
 add_library(ospray_sdk INTERFACE)
 target_link_libraries(ospray_sdk
 INTERFACE
-  ospray_module_ispc ospcommon::ospcommon
+  ospray_module_ispc rkcommon::rkcommon
 )
 ospray_install_target(ospray_sdk devel)
 

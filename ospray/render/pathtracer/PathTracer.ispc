@@ -1,4 +1,4 @@
-// Copyright 2009-2019 Intel Corporation
+// Copyright 2009-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #include "PathSampler.ih"
@@ -9,12 +9,14 @@
 
 #include "bsdfs/BSDF.ih"
 #include "bsdfs/MicrofacetAlbedoTables.ih"
+#include "lights/Light.ih"
 #include "materials/Material.ih"
 #include "materials/Medium.ih"
 #include "volumes/VolumeSampler.ih"
 
 #include "camera/Camera.ih"
 #include "fb/LocalFB.ih"
+#include "math/Distribution1D.ih"
 #include "math/random.ih"
 
 ScreenSample PathTraceIntegrator_Li(const PathTracer *uniform self,
@@ -33,8 +35,11 @@ ScreenSample PathTraceIntegrator_Li(const PathTracer *uniform self,
   sample.normal = make_vec3f(0.0f);
   sample.albedo = make_vec3f(0.0f);
 
-  const uniform int numLights =
-      self->lights ? min(MAX_LIGHTS, self->numLights) : 0;
+  const uniform int numLights = world->pathtracerData.lights
+      ? min(MAX_LIGHTS, world->pathtracerData.numLights)
+      : 0;
+  const uniform int numLightSamples =
+      self->numLightSamples >= 0 ? self->numLightSamples : numLights;
   PathContext pathContext;
   pathContext.context = self;
   pathContext.world = world;
@@ -42,14 +47,21 @@ ScreenSample PathTraceIntegrator_Li(const PathTracer *uniform self,
   pathContext.ldSampler = ldSampler;
   pathContext.randomSampler = randomSampler;
   pathContext.numLights = numLights;
-  pathContext.numBounceSampleDims = 4
-      + numLights * 2; // BSDF sample (3D), roulette (1D), light samples (N*2D)
+  pathContext.numLightSamples = numLightSamples;
+  pathContext.lightsCDF = world->pathtracerData.lightsCDF;
+
+  pathContext.numBounceSampleDims =
+      4 + numLightSamples * 3; // BSDF sample (3D), roulette (1D), light samples
+                               // * (3D, light selection and sampling the light)
 
   PathState pathState;
   pathState.disableNEE = false;
   pathState.disableFWD = false;
   pathState.straightPath = true; // path from camera did not change direction,
                                  // for alpha and backplate
+  pathState.specularTransmissionPath =
+      true; // path from camera only has specular transmissions, for alpha and
+            // backplate
   pathState.auxFree = true; // normal & albedo buffer were not yet written to
   pathState.depth = 0;
   pathState.sampleDim = 5; // skip: pixel (2D), lens (2D), time (1D)
@@ -99,10 +111,19 @@ inline ScreenSample PathTracer_renderPixel(PathTracer *uniform self,
 
     CameraSample cameraSample;
     const vec2f pixelSample = LDSampler_getFloat2(ldSampler, 0);
+
+    vec2f pfSample = pixelSample;
+    if (self->super.pixelFilter) {
+      pfSample =
+          self->super.pixelFilter->sample(self->super.pixelFilter, pixelSample)
+          + make_vec2f(0.5f);
+    }
+
     cameraSample.screen.x =
-        (screenSample.sampleID.x + pixelSample.x) * fb->rcpSize.x;
+        (screenSample.sampleID.x + pfSample.x) * fb->rcpSize.x;
     cameraSample.screen.y =
-        (screenSample.sampleID.y + pixelSample.y) * fb->rcpSize.y;
+        (screenSample.sampleID.y + pfSample.y) * fb->rcpSize.y;
+
     cameraSample.lens = LDSampler_getFloat2(ldSampler, 2);
     cameraSample.time = LDSampler_getFloat(ldSampler, 4);
 
@@ -178,12 +199,16 @@ unmasked void PathTracer_renderTile(Renderer *uniform _self,
 export void PathTracer_set(void *uniform _self,
     const uniform int32 rouletteDepth,
     const uniform float maxRadiance,
-    const uniform vec4f &shadowCatcherPlane)
+    const uniform vec4f &shadowCatcherPlane,
+    const uniform int32 numLightSamples,
+    const uniform bool backgroundRefraction)
 {
   PathTracer *uniform self = (PathTracer * uniform) _self;
 
   self->rouletteDepth = rouletteDepth;
   self->maxRadiance = maxRadiance;
+  self->numLightSamples = numLightSamples;
+  self->backgroundRefraction = backgroundRefraction;
 
   uniform vec3f normal = make_vec3f(shadowCatcherPlane);
   const uniform float l = length(normal);
@@ -192,29 +217,17 @@ export void PathTracer_set(void *uniform _self,
   self->shadowCatcherPlane = make_vec4f(normal * rl, shadowCatcherPlane.w * rl);
 }
 
-export void PathTracer_setLights(void *uniform _self,
-    void **uniform lights,
-    const uniform uint32 numLights,
-    const uniform uint32 numGeoLights)
-{
-  PathTracer *uniform self = (PathTracer * uniform) _self;
-
-  self->lights = (const uniform Light *uniform *uniform)lights;
-  self->numLights = numLights;
-  self->numGeoLights = numGeoLights;
-}
-
 export void *uniform PathTracer_create(void *uniform cppE)
 {
   uniform PathTracer *uniform self = uniform new uniform PathTracer;
   Renderer_Constructor(&self->super, cppE);
   self->super.renderTile = PathTracer_renderTile;
 
-  PathTracer_set(self, 5, inf, make_vec4f(0.f));
-  PathTracer_setLights(self, NULL, 0, 0);
+  PathTracer_set(self, 5, inf, make_vec4f(0.f), 1, false);
 
   precomputeMicrofacetAlbedoTables();
   precomputeZOrder();
 
   return self;
 }
+

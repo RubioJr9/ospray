@@ -5,7 +5,7 @@
 #include "World.h"
 #include "api/ISPCDevice.h"
 // ispc exports
-#include "World_ispc.h"
+#include "common/World_ispc.h"
 
 namespace ospray {
 
@@ -17,7 +17,7 @@ extern "C" void *ospray_getEmbreeDevice()
 // Embree helper functions ///////////////////////////////////////////////////
 
 static void addGeometryInstance(
-    RTCScene &scene, RTCScene instScene, const ospcommon::math::affine3f &xfm)
+    RTCScene &scene, RTCScene instScene, const rkcommon::math::affine3f &xfm)
 {
   // Create parent scene if not yet created
   RTCDevice embreeDevice = (RTCDevice)ospray_getEmbreeDevice();
@@ -30,6 +30,7 @@ static void addGeometryInstance(
   rtcSetGeometryTransform(eInst, 0, RTC_FORMAT_FLOAT3X4_COLUMN_MAJOR, &xfm);
   rtcCommitGeometry(eInst);
   rtcAttachGeometry(scene, eInst);
+  rtcReleaseGeometry(eInst);
 }
 
 static void freeAndNullifyEmbreeScene(RTCScene &scene)
@@ -47,6 +48,8 @@ World::~World()
   freeAndNullifyEmbreeScene(embreeSceneHandleGeometries);
   freeAndNullifyEmbreeScene(embreeSceneHandleVolumes);
   freeAndNullifyEmbreeScene(embreeSceneHandleClippers);
+  ispc::World_destroy(getIE());
+  ispcEquivalent = nullptr;
 }
 
 World::World()
@@ -65,6 +68,9 @@ void World::commit()
   freeAndNullifyEmbreeScene(embreeSceneHandleGeometries);
   freeAndNullifyEmbreeScene(embreeSceneHandleVolumes);
   freeAndNullifyEmbreeScene(embreeSceneHandleClippers);
+
+  scivisDataValid = false;
+  pathtracerDataValid = false;
 
   instances = getParamDataT<Instance *>("instance");
   lights = getParamDataT<Light *>("light");

@@ -8,18 +8,18 @@
 #include "GLFW/glfw3.h"
 // ospray
 #include "ospray/ospray_cpp.h"
-// ospcommon
-#include "ospcommon/containers/TransactionalBuffer.h"
+#include "rkcommon/containers/TransactionalBuffer.h"
 // std
 #include <functional>
 
-using namespace ospcommon::math;
+using namespace rkcommon::math;
 using namespace ospray;
 
 enum class OSPRayRendererType
 {
   SCIVIS,
   PATHTRACER,
+  AO,
   DEBUGGER,
   OTHER
 };
@@ -60,8 +60,10 @@ class GLFWOSPRayWindow
   bool updateFrameOpsNextFrame{false};
   bool denoiserEnabled{false};
   bool showAlbedo{false};
+  bool showDepth{false};
   bool renderSunSky{false};
   bool cancelFrameOnInteraction{false};
+  bool showUnstructuredCells{false};
 
   // GLFW window instance
   GLFWwindow *glfwWindow = nullptr;
@@ -70,7 +72,11 @@ class GLFWOSPRayWindow
   std::unique_ptr<ArcballCamera> arcballCamera;
 
   // OSPRay objects managed by this class
-  cpp::Renderer renderer;
+  cpp::Renderer rendererPT{"pathtracer"};
+  cpp::Renderer rendererSV{"scivis"};
+  cpp::Renderer rendererAO{"ao"};
+  cpp::Renderer rendererDBG{"debug"};
+  cpp::Renderer *renderer{nullptr};
   cpp::Camera camera{"perspective"};
   cpp::World world;
   cpp::Light sunSky{"sunSky"};
@@ -81,16 +87,19 @@ class GLFWOSPRayWindow
   vec3f bgColor{0.f};
   vec3f sunDirection{-0.25f, -1.0f, 0.0f};
   float turbidity{3.f};
+  float horizonExtension{0.1f};
 
-  std::string scene{"boxes"};
+  std::string scene{"boxes_lit"};
 
   std::string curveBasis{"bspline"};
 
   OSPRayRendererType rendererType{OSPRayRendererType::SCIVIS};
   std::string rendererTypeStr{"scivis"};
 
+  std::string pixelFilterTypeStr{"gaussian"};
+
   // List of OSPRay handles to commit before the next frame
-  ospcommon::containers::TransactionalBuffer<OSPObject> objectsToCommit;
+  rkcommon::containers::TransactionalBuffer<OSPObject> objectsToCommit;
 
   // OpenGL framebuffer texture
   GLuint framebufferTexture = 0;

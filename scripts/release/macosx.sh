@@ -1,5 +1,5 @@
 #!/bin/bash
-## Copyright 2014-2019 Intel Corporation
+## Copyright 2014-2020 Intel Corporation
 ## SPDX-License-Identifier: Apache-2.0
 
 #### Helper functions ####
@@ -15,6 +15,7 @@ umask 002
 
 ROOT_DIR=$PWD
 DEP_DIR=$ROOT_DIR/deps
+DEP_BUILD_DIR=$ROOT_DIR/build_deps
 THREADS=`sysctl -n hw.logicalcpu`
 
 # set compiler if the user hasn't explicitly set CC and CXX
@@ -33,8 +34,8 @@ unset DYLD_LIBRARY_PATH
 
 #### Build dependencies ####
 
-mkdir deps_build
-cd deps_build
+mkdir $DEP_BUILD_DIR
+cd $DEP_BUILD_DIR
 
 cmake --version
 
@@ -63,8 +64,7 @@ cd build_release
 rm -rf *
 
 # Setup environment variables for dependencies
-export OSPCOMMON_TBB_ROOT=$DEP_DIR
-export ospcommon_DIR=$DEP_DIR
+export rkcommon_DIR=$DEP_DIR
 export embree_DIR=$DEP_DIR
 export glfw3_DIR=$DEP_DIR
 export openvkl_DIR=$DEP_DIR
@@ -73,6 +73,7 @@ export OpenImageDenoise_DIR=$DEP_DIR
 # set release and installer settings
 cmake -L \
   -D OSPRAY_BUILD_ISA=ALL \
+  -D TBB_ROOT=$DEP_DIR \
   -D ISPC_EXECUTABLE=$DEP_DIR/bin/ispc \
   -D OSPRAY_ZIP_MODE=OFF \
   -D OSPRAY_MODULE_DENOISER=ON \
@@ -82,6 +83,8 @@ cmake -L \
   -D CMAKE_INSTALL_LIBDIR=lib \
   -D CMAKE_INSTALL_DOCDIR=../../Applications/OSPRay/doc \
   -D CMAKE_INSTALL_BINDIR=../../Applications/OSPRay/bin \
+  -D CMAKE_BUILD_WITH_INSTALL_RPATH=ON \
+  -D OSPRAY_SIGN_FILE=$SIGN_FILE_MAC \
   ..
 
 # create installers
@@ -98,4 +101,5 @@ cmake -L \
   ..
 
 # create ZIP files
+make sign_files || exit 2
 make -j $THREADS package || exit 2

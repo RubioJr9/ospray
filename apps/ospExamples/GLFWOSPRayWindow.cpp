@@ -15,36 +15,46 @@
 #ifndef GL_CLAMP_TO_BORDER
 #define GL_CLAMP_TO_BORDER 0x812D
 #endif
-#ifndef GL_SRGB_ALPHA
-#define GL_SRGB_ALPHA 0x8C42
-#endif
 #ifndef GL_FRAMEBUFFER_SRGB
 #define GL_FRAMEBUFFER_SRGB 0x8DB9
+#endif
+#ifndef GL_RGBA32F
+#define GL_RGBA32F 0x8814
+#endif
+#ifndef GL_RGB32F
+#define GL_RGB32F 0x8815
 #endif
 
 static bool g_quitNextFrame = false;
 
-static const std::vector<std::string> g_scenes = {"boxes",
+static const std::vector<std::string> g_scenes = {"boxes_lit",
+    "boxes",
     "cornell_box",
     "curves",
     "gravity_spheres_volume",
+    "gravity_spheres_amr",
     "gravity_spheres_isosurface",
     "perlin_noise_volumes",
     "random_spheres",
     "streamlines",
     "subdivision_cube",
     "unstructured_volume",
+    "unstructured_volume_isosurface",
     "planes",
     "clip_with_spheres",
     "clip_with_planes",
     "clip_gravity_spheres_volume",
-    "clip_perlin_noise_volumes"};
+    "clip_perlin_noise_volumes",
+    "clip_particle_volume",
+    "particle_volume",
+    "particle_volume_isosurface",
+    "vdb_volume"};
 
 static const std::vector<std::string> g_curveBasis = {
     "bspline", "hermite", "catmull-rom", "linear"};
 
 static const std::vector<std::string> g_renderers = {
-    "scivis", "pathtracer", "debug"};
+    "scivis", "pathtracer", "ao", "debug"};
 
 static const std::vector<std::string> g_debugRendererTypes = {"eyeLight",
     "primID",
@@ -57,6 +67,9 @@ static const std::vector<std::string> g_debugRendererTypes = {"eyeLight",
     "dPds",
     "dPdt",
     "volume"};
+
+static const std::vector<std::string> g_pixelFilterTypes = {
+    "point", "box", "gaussian", "mitchell", "blackmanHarris"};
 
 bool sceneUI_callback(void *, int index, const char **out_text)
 {
@@ -79,6 +92,12 @@ bool rendererUI_callback(void *, int index, const char **out_text)
 bool debugTypeUI_callback(void *, int index, const char **out_text)
 {
   *out_text = g_debugRendererTypes[index].c_str();
+  return true;
+}
+
+bool pixelFilterTypeUI_callback(void *, int index, const char **out_text)
+{
+  *out_text = g_pixelFilterTypes[index].c_str();
   return true;
 }
 
@@ -168,7 +187,8 @@ GLFWOSPRayWindow::GLFWOSPRayWindow(const vec2i &windowSize, bool denoiser)
           const vec2f pos(mouse.x / static_cast<float>(windowSize.x),
               1.f - mouse.y / static_cast<float>(windowSize.y));
 
-          auto res = w.framebuffer.pick(w.renderer, w.camera, w.world, pos);
+          auto res =
+              w.framebuffer.pick(*w.renderer, w.camera, w.world, pos.x, pos.y);
 
           if (res.hasHit) {
             std::cout << "Picked geometry [inst: " << res.instance
@@ -179,6 +199,19 @@ GLFWOSPRayWindow::GLFWOSPRayWindow(const vec2i &windowSize, bool denoiser)
       });
 
   // OSPRay setup //
+
+  // set up backplate texture
+  std::vector<vec4f> backplate;
+  backplate.push_back(vec4f(0.8f, 0.2f, 0.2f, 1.0f));
+  backplate.push_back(vec4f(0.2f, 0.8f, 0.2f, 1.0f));
+  backplate.push_back(vec4f(0.2f, 0.2f, 0.8f, 1.0f));
+  backplate.push_back(vec4f(0.4f, 0.2f, 0.4f, 1.0f));
+
+  OSPTextureFormat texFmt = OSP_TEXTURE_RGBA32F;
+  backplateTex.setParam(
+      "data", cpp::CopiedData(backplate.data(), vec2ul(2, 2)));
+  backplateTex.setParam("format", OSP_INT, &texFmt);
+  addObjectToCommit(backplateTex.handle());
 
   refreshScene(true);
 
@@ -225,7 +258,8 @@ void GLFWOSPRayWindow::reshape(const vec2i &newWindowSize)
   // create new frame buffer
   auto buffers = OSP_FB_COLOR | OSP_FB_DEPTH | OSP_FB_ACCUM | OSP_FB_ALBEDO
       | OSP_FB_NORMAL;
-  framebuffer = cpp::FrameBuffer(windowSize, OSP_FB_RGBA32F, buffers);
+  framebuffer =
+      cpp::FrameBuffer(windowSize.x, windowSize.y, OSP_FB_RGBA32F, buffers);
 
   refreshFrameOperations();
 
@@ -309,17 +343,17 @@ void GLFWOSPRayWindow::display()
 
     latestFPS = 1.f / currentFrame.duration();
 
-    auto *fb = framebuffer.map(showAlbedo ? OSP_FB_ALBEDO : OSP_FB_COLOR);
+    auto *fb = framebuffer.map(
+        showDepth ? OSP_FB_DEPTH : (showAlbedo ? OSP_FB_ALBEDO : OSP_FB_COLOR));
 
-    const GLint glFormat = showAlbedo ? GL_RGB : GL_RGBA;
     glBindTexture(GL_TEXTURE_2D, framebufferTexture);
     glTexImage2D(GL_TEXTURE_2D,
         0,
-        glFormat,
+        showAlbedo ? GL_RGB32F : GL_RGBA32F,
         windowSize.x,
         windowSize.y,
         0,
-        glFormat,
+        showDepth ? GL_RED : (showAlbedo ? GL_RGB : GL_RGBA),
         GL_FLOAT,
         fb);
 
@@ -368,7 +402,7 @@ void GLFWOSPRayWindow::startNewOSPRayFrame()
     refreshFrameOperations();
     updateFrameOpsNextFrame = false;
   }
-  currentFrame = framebuffer.renderFrame(renderer, camera, world);
+  currentFrame = framebuffer.renderFrame(*renderer, camera, world);
 }
 
 void GLFWOSPRayWindow::waitOnOSPRayFrame()
@@ -431,6 +465,11 @@ void GLFWOSPRayWindow::buildUI()
     }
   }
 
+  if (scene == "unstructured_volume") {
+    if (ImGui::Checkbox("show cells", &showUnstructuredCells))
+      refreshScene(true);
+  }
+
   static int whichRenderer = 0;
   static int whichDebuggerType = 0;
   if (ImGui::Combo("renderer##whichRenderer",
@@ -447,6 +486,8 @@ void GLFWOSPRayWindow::buildUI()
       rendererType = OSPRayRendererType::SCIVIS;
     else if (rendererTypeStr == "pathtracer")
       rendererType = OSPRayRendererType::PATHTRACER;
+    else if (rendererTypeStr == "ao")
+      rendererType = OSPRayRendererType::AO;
     else if (rendererTypeStr == "debug")
       rendererType = OSPRayRendererType::DEBUGGER;
     else
@@ -461,13 +502,17 @@ void GLFWOSPRayWindow::buildUI()
             debugTypeUI_callback,
             nullptr,
             g_debugRendererTypes.size())) {
-      renderer.setParam("method", g_debugRendererTypes[whichDebuggerType]);
-      addObjectToCommit(renderer.handle());
+      renderer->setParam("method", g_debugRendererTypes[whichDebuggerType]);
+      addObjectToCommit(renderer->handle());
     }
   }
 
   ImGui::Checkbox("cancel frame on interaction", &cancelFrameOnInteraction);
-  ImGui::Checkbox("show albedo", &showAlbedo);
+  ImGui::Checkbox("show depth", &showDepth);
+  if (showDepth)
+    showAlbedo = false;
+  else
+    ImGui::Checkbox("show albedo", &showAlbedo);
   if (denoiserAvailable) {
     if (ImGui::Checkbox("denoiser", &denoiserEnabled))
       updateFrameOpsNextFrame = true;
@@ -475,38 +520,82 @@ void GLFWOSPRayWindow::buildUI()
 
   ImGui::Separator();
 
+  // the gaussian pixel fiter is the default,
+  // which is at position 2 in the list
+  static int whichPixelFilter = 2;
+  if (ImGui::Combo("pixelfilter##whichPixelFilter",
+          &whichPixelFilter,
+          pixelFilterTypeUI_callback,
+          nullptr,
+          g_pixelFilterTypes.size())) {
+    pixelFilterTypeStr = g_pixelFilterTypes[whichPixelFilter];
+
+    OSPPixelFilterTypes pixelFilterType =
+        OSPPixelFilterTypes::OSP_PIXELFILTER_GAUSS;
+    if (pixelFilterTypeStr == "point")
+      pixelFilterType = OSPPixelFilterTypes::OSP_PIXELFILTER_POINT;
+    else if (pixelFilterTypeStr == "box")
+      pixelFilterType = OSPPixelFilterTypes::OSP_PIXELFILTER_BOX;
+    else if (pixelFilterTypeStr == "gaussian")
+      pixelFilterType = OSPPixelFilterTypes::OSP_PIXELFILTER_GAUSS;
+    else if (pixelFilterTypeStr == "mitchell")
+      pixelFilterType = OSPPixelFilterTypes::OSP_PIXELFILTER_MITCHELL;
+    else if (pixelFilterTypeStr == "blackmanHarris")
+      pixelFilterType = OSPPixelFilterTypes::OSP_PIXELFILTER_BLACKMAN_HARRIS;
+
+    rendererPT.setParam("pixelFilter", pixelFilterType);
+    rendererSV.setParam("pixelFilter", pixelFilterType);
+    rendererAO.setParam("pixelFilter", pixelFilterType);
+    rendererDBG.setParam("pixelFilter", pixelFilterType);
+    addObjectToCommit(renderer->handle());
+  }
+
+  ImGui::Separator();
+
   static int spp = 1;
   if (ImGui::SliderInt("pixelSamples", &spp, 1, 64)) {
-    renderer.setParam("pixelSamples", spp);
-    addObjectToCommit(renderer.handle());
+    rendererPT.setParam("pixelSamples", spp);
+    rendererSV.setParam("pixelSamples", spp);
+    rendererAO.setParam("pixelSamples", spp);
+    rendererDBG.setParam("pixelSamples", spp);
+    addObjectToCommit(renderer->handle());
   }
 
   if (ImGui::ColorEdit3("backgroundColor", bgColor)) {
-    renderer.setParam("backgroundColor", bgColor);
-    addObjectToCommit(renderer.handle());
+    rendererPT.setParam("backgroundColor", bgColor);
+    rendererSV.setParam("backgroundColor", bgColor);
+    rendererAO.setParam("backgroundColor", bgColor);
+    rendererDBG.setParam("backgroundColor", bgColor);
+    addObjectToCommit(renderer->handle());
   }
 
   static bool useTestTex = false;
   if (ImGui::Checkbox("backplate texture", &useTestTex)) {
     if (useTestTex) {
-      renderer.setParam("map_backplate", backplateTex);
+      rendererPT.setParam("map_backplate", backplateTex);
+      rendererSV.setParam("map_backplate", backplateTex);
+      rendererAO.setParam("map_backplate", backplateTex);
+      rendererDBG.setParam("map_backplate", backplateTex);
     } else {
-      renderer.removeParam("map_backplate");
+      rendererPT.removeParam("map_backplate");
+      rendererSV.removeParam("map_backplate");
+      rendererAO.removeParam("map_backplate");
+      rendererDBG.removeParam("map_backplate");
     }
-    addObjectToCommit(renderer.handle());
+    addObjectToCommit(renderer->handle());
   }
 
   if (rendererType == OSPRayRendererType::PATHTRACER) {
     if (ImGui::Checkbox("renderSunSky", &renderSunSky)) {
       if (renderSunSky) {
         sunSky.setParam("direction", sunDirection);
-        world.setParam("light", cpp::Data(sunSky));
+        world.setParam("light", cpp::CopiedData(sunSky));
         addObjectToCommit(sunSky.handle());
       } else {
         cpp::Light light("ambient");
         light.setParam("visible", false);
         light.commit();
-        world.setParam("light", cpp::Data(light));
+        world.setParam("light", cpp::CopiedData(light));
       }
       addObjectToCommit(world.handle());
     }
@@ -519,41 +608,64 @@ void GLFWOSPRayWindow::buildUI()
         sunSky.setParam("turbidity", turbidity);
         addObjectToCommit(sunSky.handle());
       }
+      if (ImGui::DragFloat(
+              "horizonExtension", &horizonExtension, 0.01f, 0.f, 1.f)) {
+        sunSky.setParam("horizonExtension", horizonExtension);
+        addObjectToCommit(sunSky.handle());
+      }
     }
     static int maxDepth = 20;
     if (ImGui::SliderInt("maxPathLength", &maxDepth, 1, 64)) {
-      renderer.setParam("maxPathLength", maxDepth);
-      addObjectToCommit(renderer.handle());
+      renderer->setParam("maxPathLength", maxDepth);
+      addObjectToCommit(renderer->handle());
     }
 
     static int rouletteDepth = 1;
     if (ImGui::SliderInt("roulettePathLength", &rouletteDepth, 1, 64)) {
-      renderer.setParam("roulettePathLength", rouletteDepth);
-      addObjectToCommit(renderer.handle());
+      renderer->setParam("roulettePathLength", rouletteDepth);
+      addObjectToCommit(renderer->handle());
     }
 
     static float minContribution = 0.001f;
     if (ImGui::SliderFloat("minContribution", &minContribution, 0.f, 1.f)) {
-      renderer.setParam("minContribution", minContribution);
-      addObjectToCommit(renderer.handle());
+      renderer->setParam("minContribution", minContribution);
+      addObjectToCommit(renderer->handle());
     }
   } else if (rendererType == OSPRayRendererType::SCIVIS) {
+    static bool shadowsEnabled = false;
+    if (ImGui::Checkbox("shadows", &shadowsEnabled)) {
+      renderer->setParam("shadows", shadowsEnabled);
+      addObjectToCommit(renderer->handle());
+    }
+
+    static int aoSamples = 0;
+    if (ImGui::SliderInt("aoSamples", &aoSamples, 0, 64)) {
+      renderer->setParam("aoSamples", aoSamples);
+      addObjectToCommit(renderer->handle());
+    }
+
+    static float samplingRate = 1.f;
+    if (ImGui::SliderFloat("volumeSamplingRate", &samplingRate, 0.001f, 2.f)) {
+      renderer->setParam("volumeSamplingRate", samplingRate);
+      addObjectToCommit(renderer->handle());
+    }
+  } else if (rendererType == OSPRayRendererType::AO) {
     static int aoSamples = 1;
     if (ImGui::SliderInt("aoSamples", &aoSamples, 0, 64)) {
-      renderer.setParam("aoSamples", aoSamples);
-      addObjectToCommit(renderer.handle());
+      renderer->setParam("aoSamples", aoSamples);
+      addObjectToCommit(renderer->handle());
     }
 
     static float aoIntensity = 1.f;
     if (ImGui::SliderFloat("aoIntensity", &aoIntensity, 0.f, 1.f)) {
-      renderer.setParam("aoIntensity", aoIntensity);
-      addObjectToCommit(renderer.handle());
+      renderer->setParam("aoIntensity", aoIntensity);
+      addObjectToCommit(renderer->handle());
     }
 
-    static float samplingRate = 0.125f;
-    if (ImGui::SliderFloat("volumeSamplingRate", &samplingRate, 0.001f, 1.f)) {
-      renderer.setParam("volumeSamplingRate", samplingRate);
-      addObjectToCommit(renderer.handle());
+    static float samplingRate = 1.f;
+    if (ImGui::SliderFloat("volumeSamplingRate", &samplingRate, 0.001f, 2.f)) {
+      renderer->setParam("volumeSamplingRate", samplingRate);
+      addObjectToCommit(renderer->handle());
     }
   }
 
@@ -577,40 +689,47 @@ void GLFWOSPRayWindow::commitOutstandingHandles()
 
 void GLFWOSPRayWindow::refreshScene(bool resetCamera)
 {
-  renderSunSky = false;
   auto builder = testing::newBuilder(scene);
   testing::setParam(builder, "rendererType", rendererTypeStr);
   if (scene == "curves") {
     testing::setParam(builder, "curveBasis", curveBasis);
+  } else if (scene == "unstructured_volume") {
+    testing::setParam(builder, "showCells", showUnstructuredCells);
   }
   testing::commit(builder);
 
   world = testing::buildWorld(builder);
   testing::release(builder);
 
-  world.commit();
-
-  renderer = cpp::Renderer(rendererTypeStr);
+  switch (rendererType) {
+  case OSPRayRendererType::PATHTRACER: {
+    renderer = &rendererPT;
+    if (renderSunSky)
+      world.setParam("light", cpp::CopiedData(sunSky));
+    break;
+  }
+  case OSPRayRendererType::SCIVIS:
+    renderer = &rendererSV;
+    break;
+  case OSPRayRendererType::AO:
+    renderer = &rendererAO;
+    break;
+  case OSPRayRendererType::DEBUGGER:
+    renderer = &rendererDBG;
+    break;
+  default:
+    throw std::runtime_error("invalid renderer chosen!");
+  }
   // retains a set background color on renderer change
-  renderer.setParam("backgroundColor", bgColor);
-  addObjectToCommit(renderer.handle());
+  renderer->setParam("backgroundColor", bgColor);
+  addObjectToCommit(renderer->handle());
 
-  // set up backplate texture
-  std::vector<vec4f> backplate;
-  backplate.push_back(vec4f(0.8f, 0.2f, 0.2f, 1.0f));
-  backplate.push_back(vec4f(0.2f, 0.8f, 0.2f, 1.0f));
-  backplate.push_back(vec4f(0.2f, 0.2f, 0.8f, 1.0f));
-  backplate.push_back(vec4f(0.4f, 0.2f, 0.4f, 1.0f));
-
-  OSPTextureFormat texFmt = OSP_TEXTURE_RGBA32F;
-  cpp::Data texData(vec2ul(2, 2), backplate.data());
-  backplateTex.setParam("data", texData);
-  backplateTex.setParam("format", OSP_INT, &texFmt);
-  addObjectToCommit(backplateTex.handle());
+  world.commit();
 
   if (resetCamera) {
     // create the arcball camera model
-    arcballCamera.reset(new ArcballCamera(world.getBounds(), windowSize));
+    arcballCamera.reset(
+        new ArcballCamera(world.getBounds<box3f>(), windowSize));
 
     // init camera
     updateCamera();
@@ -622,7 +741,7 @@ void GLFWOSPRayWindow::refreshFrameOperations()
 {
   if (denoiserEnabled) {
     cpp::ImageOperation d("denoiser");
-    framebuffer.setParam("imageOperation", cpp::Data(d));
+    framebuffer.setParam("imageOperation", cpp::CopiedData(d));
   } else {
     framebuffer.removeParam("imageOperation");
   }

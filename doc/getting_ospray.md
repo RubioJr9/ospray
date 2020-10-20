@@ -5,11 +5,9 @@ Prerequisites
 -------------
 
 Your CPU must support at least SSE4.1 to run OSPRay. The TGZ/ZIP
-packages contain most needed 3rd party dependencies, whereas for the
-(much smaller) RPM/installer packages you need to have installed
+packages contain most needed 3rd party dependencies. Additionally you
+need
 
-- Intel® [TBB](https://www.threadingbuildingblocks.org/) v3.0 or newer
-- [Embree] ray tracing kernels v3.7.0 or newer
 - To run the example viewer: OpenGL
 - To use the distributed, multi-node rendering feature: Intel® [MPI
   Library](https://software.intel.com/en-us/intel-mpi-library/))
@@ -28,9 +26,7 @@ For Mac OS\ X we provide OSPRay as a ZIP archive:
 For Windows we provide OSPRay binaries precompiled for 64\ bit as an MSI
 installer as well as a ZIP archive:  
 [ospray-<OSPRAY_VERSION>.x86_64.windows.msi](https://github.com/ospray/OSPRay/releases/download/v<OSPRAY_VERSION>/ospray-<OSPRAY_VERSION>.x86_64.windows.msi)  
-[ospray-<OSPRAY_VERSION>.x86_64.windows.zip](https://github.com/ospray/OSPRay/releases/download/v<OSPRAY_VERSION>/ospray-<OSPRAY_VERSION>.x86_64.windows.zip)  
-You may need to additionally install the [x64 Microsoft^\*^ Visual C++^\*^ 2015
-Redistributable](https://www.microsoft.com/download/details.aspx?id=53840).
+[ospray-<OSPRAY_VERSION>.x86_64.windows.zip](https://github.com/ospray/OSPRay/releases/download/v<OSPRAY_VERSION>/ospray-<OSPRAY_VERSION>.x86_64.windows.zip)
 
 The source code of the latest OSPRay version can be downloaded here:  
 [ospray-<OSPRAY_VERSION>.zip](https://github.com/ospray/OSPRay/archive/v<OSPRAY_VERSION>.zip)  

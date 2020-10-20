@@ -17,6 +17,8 @@ add_executable(ospTestSuite
   test_appearance.cpp
   test_light.cpp
   test_enums.cpp
+  $<$<BOOL:${OSPRAY_APPS_ENABLE_GLM}>:test_glm_compat.cpp>
+  test_camera.cpp
   ospTestSuite.cpp
 )
 
@@ -27,9 +29,12 @@ PRIVATE
   ospray_module_ispc
   gtest_main
   stb_image
+  $<$<BOOL:${OSPRAY_APPS_ENABLE_GLM}>:${GLM_TARGET}>
 )
+
+ospray_sign_target(ospTestSuite)
 
 install(TARGETS ospTestSuite
   DESTINATION ${CMAKE_INSTALL_BINDIR}
-  COMPONENT test
+  COMPONENT apps
 )
