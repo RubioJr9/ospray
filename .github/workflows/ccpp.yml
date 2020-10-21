@@ -2,9 +2,9 @@ name: C/C++ CI
 
 on:
   push:
-    branches: [ master, scirun-build ]
+    branches: [ master, scirun-build, scirun-build-2.4 ]
   pull_request:
-    branches: [ master, scirun-build ]
+    branches: [ master, scirun-build, scirun-build-2.4 ]
 
 jobs:
   linux-build:
