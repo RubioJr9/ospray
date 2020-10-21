@@ -121,6 +121,9 @@ endif()
 # Include macros for finding embree
 include(ospray_macros)
 
+# SCIRun will always install these
+set(OSPRAY_INSTALL_DEPENDENCIES ON)
+
 if (OSPRAY_INSTALL_DEPENDENCIES)
   # Dependencies installed with OSPRay
   if (WIN32)
