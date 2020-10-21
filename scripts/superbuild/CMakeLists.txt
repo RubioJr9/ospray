@@ -126,7 +126,7 @@ include(dep_glm)
 set(DEFAULT_BUILD_COMMAND ${CMAKE_COMMAND} --build . --config ${CMAKE_BUILD_TYPE} ${PARALLEL_JOBS_OPTS})
 
 if (NOT BUILD_DEPENDENCIES_ONLY)
-  include(build_ospray.cmake)
+  include(build_ospray)
   if (BUILD_OSPRAY_MODULE_MPI)
     include(build_module_mpi.cmake)
   endif()
