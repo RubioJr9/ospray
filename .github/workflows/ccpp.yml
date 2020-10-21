@@ -1,0 +1,46 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches: [ master, scirun-build ]
+  pull_request:
+    branches: [ master, scirun-build ]
+
+jobs:
+  linux-build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: prepare
+      run: sudo apt-get update && sudo apt-get install xorg-dev libglu1-mesa-dev
+    - name: configure
+      run: mkdir build && cd build && cmake .. -DENABLE_OSPRAY_SUPERBUILD:BOOL=ON
+    - name: make
+      working-directory: build
+      run: make -j2
+
+  mac-build:
+
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: configure
+      run: mkdir build && cd build && cmake .. -DENABLE_OSPRAY_SUPERBUILD:BOOL=ON
+    - name: make
+      working-directory: build
+      run: make -j2
+
+  windows-build:
+
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: configure
+      run: mkdir build && cd build && cmake .. -DENABLE_OSPRAY_SUPERBUILD:BOOL=ON
+    - name: make
+      working-directory: build
+      run: cmake --build . --config Release -j 3
