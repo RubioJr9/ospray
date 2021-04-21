@@ -120,7 +120,7 @@ if (BUILD_OIDN)
   include(dep_oidn)
 endif()
 
-include(dep_glm)
+#include(dep_glm)
 
 ## Build main projects ##
 set(DEFAULT_BUILD_COMMAND ${CMAKE_COMMAND} --build . --config ${CMAKE_BUILD_TYPE} ${PARALLEL_JOBS_OPTS})
