@@ -120,7 +120,9 @@ if (BUILD_OIDN)
   include(dep_oidn)
 endif()
 
-#include(dep_glm)
+if (NOT ${glm_DIR})
+  include(dep_glm)
+endif()
 
 ## Build main projects ##
 set(DEFAULT_BUILD_COMMAND ${CMAKE_COMMAND} --build . --config ${CMAKE_BUILD_TYPE} ${PARALLEL_JOBS_OPTS})
