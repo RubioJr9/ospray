@@ -2,6 +2,7 @@
 #define BENCHMARK_REGISTER_H
 
 #include <vector>
+#include <limits>       // std::numeric_limits
 
 #include "check.h"
 
