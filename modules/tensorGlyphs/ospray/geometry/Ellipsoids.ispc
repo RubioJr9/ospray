@@ -10,6 +10,7 @@
 #include "common/World.ih"
 #include "geometry/Geometry.ih"
 #include "math/sampling.ih"
+#include "rkcommon/math/sampling.ih"
 #include "rkcommon/math/box.ih"
 #include "rkcommon/math/vec.ih"
 
@@ -19,8 +20,60 @@ struct Ellipsoids
   Data1D vertex;
   Data1D radii;
   Data1D texcoord;
-  Data1D global_radii;
+  vec3f global_radii;
 };
+
+// robust ray-ellipsoid intersection
+inline Intersections intersectEllipsoid(const vec3f &rayOrg,
+    const vec3f &rayDir,
+    const uniform vec3f &center,
+    const uniform vec3f &radii)
+{
+  Intersections isect;
+  isect.entry.hit = false;
+  isect.exit.hit = false;
+  isect.entry.t = inf;
+  isect.exit.t = -inf;
+
+  const vec3f d = rayDir;
+  const float rd2 = 1.0f / dot(d, d); // 1/a
+  const vec3f CO = center - rayOrg;
+  // transformation to avoid missing a small sphere which is far away:
+  // the standard c=CO^2-r^2 would quickly loose term r due to float arithmetic
+  const float projCO = dot(CO, d) * rd2; // in ray-space
+  const vec3f perp = CO - projCO * d;
+  const float l2 = dot(perp, perp);
+  const uniform float r2 = sqr(radii.x);
+  if (l2 > r2)
+    return isect;
+  float td = sqrt((r2 - l2) * rd2);
+  isect.entry.hit = true;
+  isect.exit.hit = true;
+  isect.entry.t = projCO - td;
+  isect.exit.t = projCO + td;
+
+  // above solutions are problematic if rays starts close to the sphere
+  // (due to catastrophic cancellation, because then |projCO| ~ td)
+  // the usual recommendation is to choose the one solution with same sign:
+  //   const float t1 = projCO + floatbits(signbits(projCO)|intbits(td));
+  // and compute the other solution via t1*t2=c/a:
+  //   const float t2 = (dot(CO, CO) - r2) / t1 * rd2;
+  // this is more precise, but still problematic in particular for large
+  // spheres, because |CO| ~ r; slightly better alternative, but costly sqrt:
+  //   const float f = sqrt(dot(CO, CO));
+  //   const float t2 = (f - radius) * (f + radius) / t1 * rd2;
+  // the only variant I found that has high enough precision to avoid
+  // self-intersections of 2ndary rays is to (re-)compute most terms (CO, dot,
+  // r2, t2) with doubles; large spheres are a rare usecase for OSPRay, thus we
+  // use instead as a workaround an additional, radius-dependent epsilon
+
+  // cannot easily be moved to postIntersect
+  // we need hit in object space, in postIntersect it is in world-space
+  isect.entry.N = -td * d - perp;
+  isect.exit.N = td * d - perp;
+
+  return isect;
+}
 
 static void Ellipsoids_postIntersect(const Geometry *uniform geometry,
     varying DifferentialGeometry &dg,
@@ -37,7 +90,7 @@ static void Ellipsoids_postIntersect(const Geometry *uniform geometry,
 
   // make epsilon large enough to not get lost when computing
   // |CO| = |center-ray.org| ~ radius for 2ndary rays
-  dg.epsilon = radii * ulpEpsilon;
+  dg.epsilon = radii.x * ulpEpsilon;
 
   if (and(flags & DG_TEXCOORD, valid(self->texcoord)))
     dg.st = get_vec2f(self->texcoord, ray.primID);
@@ -47,7 +100,7 @@ unmasked void Ellipsoids_bounds(const RTCBoundsFunctionArguments *uniform args)
 {
   Ellipsoids *uniform self = (Ellipsoids * uniform) args->geometryUserPtr;
   uniform int primID = args->primID;
-  uniform float radii = valid(self->radii) ? get_float(self->radii, primID)
+  uniform vec3f radii = valid(self->radii) ? get_vec3f(self->radii, primID)
                                            : self->global_radii;
   uniform vec3f center = get_vec3f(self->vertex, primID);
   box3fa *uniform out = (box3fa * uniform) args->bounds_o;
@@ -68,7 +121,7 @@ void Ellipsoids_intersect_kernel(
   // this assumes that the args->rayhit is actually a pointer to a varying ray!
   varying Ray *uniform ray = (varying Ray * uniform) args->rayhit;
 
-  uniform float radii = valid(self->radii) ? get_float(self->radii, primID)
+  uniform vec3f radii = valid(self->radii) ? get_vec3f(self->radii, primID)
                                            : self->global_radii;
   uniform vec3f center = get_vec3f(self->vertex, primID);
 
@@ -85,10 +138,19 @@ unmasked void Ellipsoids_intersect(
   Ellipsoids_intersect_kernel(args, false);
 }
 
+
 unmasked void Ellipsoids_occluded(
     const struct RTCOccludedFunctionNArguments *uniform args)
 {
   Ellipsoids_intersect_kernel((RTCIntersectFunctionNArguments *)args, true);
+}
+
+inline vec3f uniformSampleEllipsoid(const vec3f radii, const vec2f s)
+{
+  const float phi = two_pi * s.x;
+  const float cosTheta = radii.x * (1.f - 2.f * s.y);
+  const float sinTheta = 2.f * radii.x * sqrt(s.y * (1.f - s.y));
+  return cartesian(phi, sinTheta, cosTheta);
 }
 
 SampleAreaRes Ellipsoids_sampleArea(const Geometry *uniform const _self,
@@ -99,9 +161,9 @@ SampleAreaRes Ellipsoids_sampleArea(const Geometry *uniform const _self,
 {
   const Ellipsoids *const uniform self = (const Ellipsoids *uniform)_self;
 
-  float radii = self->global_radii;
+  vec3f radii = self->global_radii;
   if (valid(self->radii))
-    radii = get_float(self->radii, primID);
+    radii = get_vec3f(self->radii, primID);
 
   const vec3f localNormal = uniformSampleEllipsoid(radii, s);
   const vec3f localPos = get_vec3f(self->vertex, primID) + localNormal;
@@ -133,13 +195,17 @@ void Ellipsoids_getAreas(const Geometry *const uniform _self,
   const uniform float scale = four_pi * sqr(reduce_add(scaling3) / 3.f);
 
   if (!valid(self->radii)) {
-    const uniform float sphereArea = scale * sqr(self->global_radii);
+
+    const uniform float sphereArea = scale * sqr(self->global_radii.x);
     foreach (i = 0 ... numPrims)
       areas[i] = sphereArea;
   } else {
     // TODO vectorize this loop, with foreach or ProgramCount & ProgramIndex
     for (uniform int32 i = 0; i < numPrims; i++)
-      areas[i] = scale * sqr(get_float(self->radii, i));
+    {
+      uniform vec3f radii = get_vec3f(self->radii, i);
+      areas[i] = scale * sqr(radii.x);
+    }
   }
 }
 
@@ -166,7 +232,7 @@ export void EllipsoidsGeometry_set(void *uniform _self,
     const Data1D *uniform vertex,
     const Data1D *uniform radii,
     const Data1D *uniform texcoord,
-    uniform float global_radii)
+    uniform vec3f &global_radii)
 {
   Ellipsoids *uniform self = (Ellipsoids * uniform) _self;
 

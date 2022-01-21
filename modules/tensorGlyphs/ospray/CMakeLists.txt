@@ -28,7 +28,8 @@
 #
 add_library(ospray_module_tensor_glyphs SHARED)
 
-ispc_include_directories(${RKCOMMON_INCLUDE_DIRS})
+ispc_include_directories(${RKCOMMON_INCLUDE_DIRS}
+  ${PROJECT_SOURCE_DIR}/ospray/include)
 
 ispc_target_add_sources(ospray_module_tensor_glyphs
   # the cpp file that contains all the plugin code - parsing

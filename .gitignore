@@ -28,6 +28,7 @@ readme.pdf
 !/modules/denoiser
 !/modules/mpi
 !/modules/multiDevice
+!/modules/tensorGlyphs
 *.vim
 .idea/
 premake.local.*
