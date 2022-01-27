@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "Geometry.h"
+#include "geometry/Geometry.h"
 
 namespace ospray {
 
@@ -19,7 +19,7 @@ struct OSPRAY_SDK_INTERFACE Ellipsoids : public Geometry
   virtual size_t numPrimitives() const override;
 
  protected:
-  Ref<const DataT<vec3f>> radii{0.01, 0.02, 0.03};
+  Ref<const DataT<vec3f>> radii;
   Ref<const DataT<vec3f>> vertexData;
   Ref<const DataT<vec3f>> radiiData;
   Ref<const DataT<vec2f>> texcoordData;

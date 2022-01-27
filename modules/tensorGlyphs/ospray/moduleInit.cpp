@@ -4,7 +4,6 @@
 /*! \file ospray/moduleInit \brief Defines the module initialization callback */
 
 #include "geometry/Ellipsoids.h"
-#include "Ellipsoids.h"
 #include "ospray/version.h"
 
 /*! _everything_ in the ospray core universe should _always_ be in the

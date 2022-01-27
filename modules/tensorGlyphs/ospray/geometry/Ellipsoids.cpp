@@ -28,7 +28,6 @@ void Ellipsoids::commit()
   if (!embreeGeometry) {
     embreeGeometry = rtcNewGeometry(embreeDevice, RTC_GEOMETRY_TYPE_USER);
   }
-  radii = getParam<vec3f>("radii", {0.01f, 0.02f, 0.03f});
   vertexData = getParamDataT<vec3f>("ellipsoid.position", true);
   radiiData = getParamDataT<vec3f>("ellipsoid.radii");
   texcoordData = getParamDataT<vec2f>("ellipsoid.texcoord");
@@ -36,9 +35,9 @@ void Ellipsoids::commit()
   ispc::EllipsoidsGeometry_set(getIE(),
       embreeGeometry,
       ispc(vertexData),
-      ispc(radiiData),
+      (ispc::vec3f &)radiiData,
       ispc(texcoordData),
-      ispc(radii));
+      (ispc::vec3f &)radii);
 
   postCreationInfo();
 }

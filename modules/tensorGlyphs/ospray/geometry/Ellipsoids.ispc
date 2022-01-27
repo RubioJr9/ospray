@@ -8,9 +8,7 @@
 #include "common/Intersect.ih"
 #include "common/Ray.ih"
 #include "common/World.ih"
-#include "geometry/Geometry.ih"
 #include "math/sampling.ih"
-#include "rkcommon/math/sampling.ih"
 #include "rkcommon/math/box.ih"
 #include "rkcommon/math/vec.ih"
 
@@ -18,7 +16,7 @@ struct Ellipsoids
 {
   Geometry super;
   Data1D vertex;
-  Data1D radii;
+  vec3f radii;
   Data1D texcoord;
   vec3f global_radii;
 };
@@ -84,13 +82,9 @@ static void Ellipsoids_postIntersect(const Geometry *uniform geometry,
 
   dg.Ng = dg.Ns = ray.Ng;
 
-  vec3f radii = self->global_radii;
-  if (valid(self->radii))
-    radii = get_vec3f(self->radii, ray.primID);
-
   // make epsilon large enough to not get lost when computing
   // |CO| = |center-ray.org| ~ radius for 2ndary rays
-  dg.epsilon = radii.x * ulpEpsilon;
+  dg.epsilon = self->radii.x * ulpEpsilon;
 
   if (and(flags & DG_TEXCOORD, valid(self->texcoord)))
     dg.st = get_vec2f(self->texcoord, ray.primID);
@@ -100,11 +94,9 @@ unmasked void Ellipsoids_bounds(const RTCBoundsFunctionArguments *uniform args)
 {
   Ellipsoids *uniform self = (Ellipsoids * uniform) args->geometryUserPtr;
   uniform int primID = args->primID;
-  uniform vec3f radii = valid(self->radii) ? get_vec3f(self->radii, primID)
-                                           : self->global_radii;
   uniform vec3f center = get_vec3f(self->vertex, primID);
   box3fa *uniform out = (box3fa * uniform) args->bounds_o;
-  *out = make_box3fa(center - radii, center + radii);
+  *out = make_box3fa(center - self->radii, center + self->radii);
 }
 
 void Ellipsoids_intersect_kernel(
@@ -121,12 +113,10 @@ void Ellipsoids_intersect_kernel(
   // this assumes that the args->rayhit is actually a pointer to a varying ray!
   varying Ray *uniform ray = (varying Ray * uniform) args->rayhit;
 
-  uniform vec3f radii = valid(self->radii) ? get_vec3f(self->radii, primID)
-                                           : self->global_radii;
   uniform vec3f center = get_vec3f(self->vertex, primID);
 
   const Intersections isect =
-      intersectEllipsoid(ray->org, ray->dir, center, radii);
+      intersectEllipsoid(ray->org, ray->dir, center, self->radii);
 
   // call intersection filtering callback and setup hit if accepted
   filterIntersectionBoth(args, isect, isOcclusionTest);
@@ -161,11 +151,7 @@ SampleAreaRes Ellipsoids_sampleArea(const Geometry *uniform const _self,
 {
   const Ellipsoids *const uniform self = (const Ellipsoids *uniform)_self;
 
-  vec3f radii = self->global_radii;
-  if (valid(self->radii))
-    radii = get_vec3f(self->radii, primID);
-
-  const vec3f localNormal = uniformSampleEllipsoid(radii, s);
+  const vec3f localNormal = uniformSampleEllipsoid(self->radii, s);
   const vec3f localPos = get_vec3f(self->vertex, primID) + localNormal;
 
   SampleAreaRes res;
@@ -194,19 +180,18 @@ void Ellipsoids_getAreas(const Geometry *const uniform _self,
   // use average as approximation to closest uniform scaling
   const uniform float scale = four_pi * sqr(reduce_add(scaling3) / 3.f);
 
-  if (!valid(self->radii)) {
+  // if (!valid(self->radii)) {
 
-    const uniform float sphereArea = scale * sqr(self->global_radii.x);
-    foreach (i = 0 ... numPrims)
-      areas[i] = sphereArea;
-  } else {
+    // const uniform float sphereArea = scale * sqr(self->global_radii.x);
+    // foreach (i = 0 ... numPrims)
+      // areas[i] = sphereArea;
+  // } else {
     // TODO vectorize this loop, with foreach or ProgramCount & ProgramIndex
     for (uniform int32 i = 0; i < numPrims; i++)
     {
-      uniform vec3f radii = get_vec3f(self->radii, i);
-      areas[i] = scale * sqr(radii.x);
+      areas[i] = scale * sqr(self->radii.x);
     }
-  }
+  // }
 }
 
 void Ellipsoids_Constructor(Ellipsoids *uniform self)
@@ -215,7 +200,7 @@ void Ellipsoids_Constructor(Ellipsoids *uniform self)
   self->super.getAreas = Ellipsoids_getAreas;
   self->super.sampleArea = Ellipsoids_sampleArea;
   Data1D_Constructor(&self->vertex);
-  Data1D_Constructor(&self->radii);
+  self->radii = make_vec3f(0.01, 0.02, 0.03);
   Data1D_Constructor(&self->texcoord);
   self->global_radii = make_vec3f(0.01, 0.02, 0.03);
 }
@@ -230,14 +215,14 @@ export void *uniform Ellipsoids_create()
 export void EllipsoidsGeometry_set(void *uniform _self,
     void *uniform _embreeGeometry,
     const Data1D *uniform vertex,
-    const Data1D *uniform radii,
+    uniform vec3f &radii,
     const Data1D *uniform texcoord,
     uniform vec3f &global_radii)
 {
   Ellipsoids *uniform self = (Ellipsoids * uniform) _self;
 
   self->vertex = *vertex;
-  self->radii = *radii;
+  self->radii = radii;
   self->texcoord = *texcoord;
   self->global_radii = global_radii;
   self->super.numPrimitives = vertex->numItems;
