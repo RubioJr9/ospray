@@ -1,12 +1,13 @@
-// Copyright 2009-2020 Intel Corporation
+// Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #include "Builder.h"
 #include "ospray_testing.h"
+#include "rkcommon/tasking/parallel_for.h"
+#include "rkcommon/utility/random.h"
 // stl
 #include <random>
 #include <vector>
-#include "rkcommon/tasking/parallel_for.h"
 // raw_to_amr
 #include "rawToAMR.h"
 
@@ -191,8 +192,8 @@ std::vector<float> GravitySpheres::generateVoxels() const
   // create random number distributions for point center and weight
   std::mt19937 gen(randomSeed);
 
-  std::uniform_real_distribution<float> centerDistribution(-1.f, 1.f);
-  std::uniform_real_distribution<float> weightDistribution(0.1f, 0.3f);
+  utility::uniform_real_distribution<float> centerDistribution(-1.f, 1.f);
+  utility::uniform_real_distribution<float> weightDistribution(0.1f, 0.3f);
 
   // populate the points
   std::vector<Point> points(numPoints);

@@ -1,4 +1,4 @@
-// Copyright 2009-2019 Intel Corporation
+// Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -11,8 +11,7 @@ namespace cpp {
 class Material : public ManagedObject<OSPMaterial, OSP_MATERIAL>
 {
  public:
-  Material(const std::string &renderer_type, const std::string &mat_type);
-  Material(const Material &copy);
+  Material(const std::string &/*ignored*/, const std::string &mat_type);
   Material(OSPMaterial existing = nullptr);
 };
 
@@ -22,15 +21,9 @@ static_assert(sizeof(Material) == sizeof(OSPMaterial),
 // Inlined function definitions ///////////////////////////////////////////
 
 inline Material::Material(
-    const std::string &renderer_type, const std::string &mat_type)
+    const std::string &/*ignored*/, const std::string &mat_type)
 {
-  ospObject = ospNewMaterial(renderer_type.c_str(), mat_type.c_str());
-}
-
-inline Material::Material(const Material &copy)
-    : ManagedObject<OSPMaterial, OSP_MATERIAL>(copy.handle())
-{
-  ospRetain(copy.handle());
+  ospObject = ospNewMaterial(nullptr, mat_type.c_str());
 }
 
 inline Material::Material(OSPMaterial existing)

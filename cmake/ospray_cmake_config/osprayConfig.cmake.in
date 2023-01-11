@@ -1,4 +1,4 @@
-## Copyright 2009-2020 Intel Corporation
+## Copyright 2009 Intel Corporation
 ## SPDX-License-Identifier: Apache-2.0
 
 # Called if we failed to find OSPRay or any of it's required dependencies,
@@ -95,7 +95,6 @@ set(OSPRAY_ISPC_TARGET_LIST    @OSPRAY_ISPC_TARGET_LIST@)
 set(OSPRAY_ISPC_ADDRESSING     @OSPRAY_ISPC_ADDRESSING@)
 
 set(OSPRAY_TILE_SIZE      @OSPRAY_TILE_SIZE@)
-set(OSPRAY_PIXELS_PER_JOB @OSPRAY_PIXELS_PER_JOB@)
 
 set(RKCOMMON_VERSION_REQUIRED @RKCOMMON_VERSION_REQUIRED@)
 set(EMBREE_VERSION_REQUIRED    @EMBREE_VERSION_REQUIRED@)
@@ -143,7 +142,9 @@ else()
   endif()
 
   if (NOT TARGET rkcommon::rkcommon)
-   find_dependency(rkcommon ${RKCOMMON_VERSION_REQUIRED})
+    find_dependency(rkcommon ${RKCOMMON_VERSION_REQUIRED})
+    get_target_property(RKCOMMON_INCLUDE_DIRS rkcommon::rkcommon
+      INTERFACE_INCLUDE_DIRECTORIES)
   endif()
 
   if (NOT TARGET openvkl::openvkl)
@@ -170,7 +171,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/ospray_Exports.cmake)
 # Add missing targets to libraries
 set_target_properties(ospray::ospray PROPERTIES
   INTERFACE_LINK_LIBRARIES "${RKCOMMON_LIBRARY}")
-set_target_properties(ospray::ospray_module_ispc PROPERTIES
+set_target_properties(ospray::ospray_module_cpu PROPERTIES
   INTERFACE_LINK_LIBRARIES "ospray::ospray;${OPENVKL_LIBRARY};${EMBREE_LIBRARY}")
 
 # Reset CMake module path to its state when this script was called.

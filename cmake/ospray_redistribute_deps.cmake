@@ -1,4 +1,4 @@
-## Copyright 2009-2020 Intel Corporation
+## Copyright 2009 Intel Corporation
 ## SPDX-License-Identifier: Apache-2.0
 
 macro(ospray_install_namelink NAME)
@@ -65,31 +65,19 @@ if (RKCOMMON_TASKING_TBB)
   ospray_add_dependent_lib(TBB::tbb)
   ospray_add_dependent_lib(TBB::tbbmalloc)
 endif()
+ospray_add_dependent_lib(embree)
 ospray_add_dependent_lib(openvkl::openvkl)
-ospray_add_dependent_lib(openvkl::openvkl_module_ispc_driver)
-ospray_add_dependent_lib(openvkl::openvkl_module_ispc_driver_4)
-ospray_add_dependent_lib(openvkl::openvkl_module_ispc_driver_8)
-ospray_add_dependent_lib(openvkl::openvkl_module_ispc_driver_16)
+ospray_add_dependent_lib(openvkl::openvkl_module_cpu_device)
+ospray_add_dependent_lib(openvkl::openvkl_module_cpu_device_4)
+ospray_add_dependent_lib(openvkl::openvkl_module_cpu_device_8)
+ospray_add_dependent_lib(openvkl::openvkl_module_cpu_device_16)
 if (OSPRAY_MODULE_DENOISER)
   ospray_add_dependent_lib(OpenImageDenoise)
 endif()
 
 if (WIN32)
-  get_filename_component(EMBREE_LIB_DIR ${EMBREE_LIBRARY} PATH)
-  set(EMBREE_DLL_HINTS
-    ${EMBREE_LIB_DIR}
-    ${EMBREE_LIB_DIR}/../bin
-    ${embree_DIR}/../../../bin
-    ${embree_DIR}/../bin
-  )
-  find_file(EMBREE_DLL embree3.dll HINTS ${EMBREE_DLL_HINTS})
-  mark_as_advanced(EMBREE_DLL)
-  list(APPEND DEPENDENT_LIBS ${EMBREE_DLL})
   set(INSTALL_DIR ${CMAKE_INSTALL_BINDIR})
 else()
-  # TODO use ospray_add_dependent_lib(embree) when v3.10 (with targets) is minimum
-  list(APPEND DEPENDENT_LIBS ${EMBREE_LIBRARY})
-  ospray_install_namelink(${EMBREE_LIBRARY})
   set(INSTALL_DIR ${CMAKE_INSTALL_LIBDIR})
 endif()
 

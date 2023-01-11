@@ -1,0 +1,15 @@
+// Copyright 2009 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
+
+#pragma once
+
+#include "common/Ray.ih"
+#include "fb/Tile.ih"
+#include "render/ScreenSample.ih"
+// c++ shared
+#include "RendererShared.h"
+
+vec4f Renderer_getBackground(
+    const Renderer *uniform self, const vec2f &screenPos);
+float Renderer_getMaxDepth(
+    const Renderer *uniform self, const vec2f &screenPos);

@@ -1,0 +1,40 @@
+// Copyright 2009 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
+
+#pragma once
+
+#include "render/Renderer.ih"
+// c++ shared
+#include "SciVisShared.h"
+
+struct LDSampler;
+struct DifferentialGeometry;
+
+struct SciVisRenderContext
+{
+  const SciVis *uniform renderer;
+  const FrameBuffer *uniform fb;
+  const World *uniform world;
+  ScreenSample sample;
+  varying LDSampler *uniform ldSampler;
+};
+
+vec3f lightAlpha(const uniform SciVis *uniform self,
+    Ray &ray,
+    const FrameBuffer *uniform fb,
+    const World *uniform world,
+    ScreenSample &sample,
+    varying LDSampler *uniform ldSampler,
+    vec3f weight,
+    float rayOffset,
+    uniform float quality);
+
+vec3f SciVis_computeAO(const uniform SciVis *uniform self,
+    const FrameBuffer *uniform fb,
+    const World *uniform world,
+    ScreenSample &sample,
+    varying LDSampler *uniform ldSampler,
+    const varying DifferentialGeometry &dg,
+    const uniform int sampleCnt,
+    const uniform float aoRadius,
+    const varying vec3i &sampleID);

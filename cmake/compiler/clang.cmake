@@ -1,4 +1,4 @@
-## Copyright 2009-2020 Intel Corporation
+## Copyright 2009 Intel Corporation
 ## SPDX-License-Identifier: Apache-2.0
 
 set(OSPRAY_CXX_FLAGS "-fno-strict-aliasing -Wno-narrowing")
@@ -14,6 +14,7 @@ if(OSPRAY_STRICT_BUILD)
   set(OSPRAY_CXX_FLAGS "-Wno-undef ${OSPRAY_CXX_FLAGS}")
   set(OSPRAY_CXX_FLAGS "-Wno-header-hygiene ${OSPRAY_CXX_FLAGS}")
   set(OSPRAY_CXX_FLAGS "-Wno-covered-switch-default ${OSPRAY_CXX_FLAGS}")
+  set(OSPRAY_CXX_FLAGS "-Wno-date-time ${OSPRAY_CXX_FLAGS}")
 
   # Should try to fix and remove...
   set(OSPRAY_CXX_FLAGS "-Wno-unknown-warning-option ${OSPRAY_CXX_FLAGS}") #don't warn if pragmas are unknown

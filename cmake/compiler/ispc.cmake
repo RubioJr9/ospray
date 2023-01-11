@@ -1,8 +1,8 @@
-## Copyright 2009-2020 Intel Corporation
+## Copyright 2009 Intel Corporation
 ## SPDX-License-Identifier: Apache-2.0
 
-# ISPC versions to look for, in decending order (newest first)
-set(ISPC_VERSION_WORKING "1.14.1")
+# ISPC versions to look for, in descending order (newest first)
+set(ISPC_VERSION_WORKING "1.18.0")
 list(GET ISPC_VERSION_WORKING -1 ISPC_VERSION_REQUIRED)
 
 if (NOT ISPC_EXECUTABLE)
@@ -40,7 +40,7 @@ if (NOT ISPC_EXECUTABLE)
     message("********************************************")
     message(FATAL_ERROR "Could not find ISPC. Exiting.")
   else()
-    message(STATUS "Found Intel SPMD Compiler (ISPC): ${ISPC_EXECUTABLE}")
+    message(STATUS "Found Intel Implicit SPMD Program Compiler (ISPC): ${ISPC_EXECUTABLE}")
   endif()
 endif()
 
@@ -50,7 +50,7 @@ if(NOT ISPC_VERSION)
   set(ISPC_VERSION ${CMAKE_MATCH_1})
 
   if (ISPC_VERSION VERSION_LESS ISPC_VERSION_REQUIRED)
-    message(FATAL_ERROR "Need at least version ${ISPC_VERSION_REQUIRED} of Intel SPMD Compiler (ISPC).")
+    message(FATAL_ERROR "Need at least version ${ISPC_VERSION_REQUIRED} of Intel Implicit SPMD Compiler (ISPC).")
   endif()
 
   set(ISPC_VERSION ${ISPC_VERSION} CACHE STRING "ISPC Version")
@@ -61,7 +61,7 @@ endif()
 message(STATUS "Found ISPC v${ISPC_VERSION}: ${ISPC_EXECUTABLE}")
 list(FIND ISPC_VERSION_WORKING ${ISPC_VERSION} ISPC_VERSION_TESTED)
 if (ISPC_VERSION_TESTED EQUAL -1)
-  message(WARNING "Using untested version ${ISPC_VERSION} of Intel SPMD Compiler (ISPC), proceed at own risk. Supported versions are ${ISPC_VERSION_WORKING}.")
+  message(WARNING "Using untested version ${ISPC_VERSION} of Intel Implicit SPMD Compiler (ISPC), proceed at own risk. Supported versions are ${ISPC_VERSION_WORKING}.")
 endif()
 
 set(OSPRAY_ISPC_ADDRESSING 32 CACHE STRING "32 vs 64 bit addressing in ispc")
@@ -99,13 +99,23 @@ endmacro ()
 
 macro (ispc_compile)
   set(ISPC_ADDITIONAL_ARGS "")
+  if (OSPRAY_STRICT_BUILD)
+    list(APPEND ISPC_ADDITIONAL_ARGS --wno-perf)
+  else()
+    list(APPEND ISPC_ADDITIONAL_ARGS --woff)
+  endif()
+
   set(ISPC_TARGETS ${OSPRAY_ISPC_TARGET_LIST})
 
   set(ISPC_TARGET_EXT ${CMAKE_CXX_OUTPUT_EXTENSION})
   string(REPLACE ";" "," ISPC_TARGET_ARGS "${ISPC_TARGETS}")
 
   if (CMAKE_SIZEOF_VOID_P EQUAL 8)
-    set(ISPC_ARCHITECTURE "x86-64")
+    if (${CMAKE_SYSTEM_PROCESSOR} MATCHES "arm64|aarch64")
+      set(ISPC_ARCHITECTURE "aarch64")
+    else()
+      set(ISPC_ARCHITECTURE "x86-64")
+    endif()
   else()
     set(ISPC_ARCHITECTURE "x86")
   endif()
@@ -137,11 +147,11 @@ macro (ispc_compile)
   string(REPLACE " " ";" ISPC_OPT_FLAGS "${ISPC_OPT_FLAGS}")
 
   if (NOT WIN32)
-    set(ISPC_ADDITIONAL_ARGS ${ISPC_ADDITIONAL_ARGS} --pic)
+    list(APPEND ISPC_ADDITIONAL_ARGS --pic)
   endif()
 
   if (NOT OSPRAY_DEBUG_BUILD)
-    set(ISPC_ADDITIONAL_ARGS ${ISPC_ADDITIONAL_ARGS} --opt=disable-assertions)
+    list(APPEND ISPC_ADDITIONAL_ARGS --opt=disable-assertions)
   endif()
 
   foreach(src ${ARGN})
@@ -193,7 +203,6 @@ macro (ispc_compile)
       --addressing=${OSPRAY_ISPC_ADDRESSING}
       ${ISPC_OPT_FLAGS}
       --target=${ISPC_TARGET_ARGS}
-      --woff
       --opt=fast-math
       ${ISPC_ADDITIONAL_ARGS}
       -h ${ISPC_TARGET_DIR}/${dir}/${fname}_ispc.h

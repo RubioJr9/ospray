@@ -1,0 +1,66 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html lang="en">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html" charset="utf-8">
+    <title>Intel OSPRay$if(select_downloads)$ Download$endif$$if(select_documentation)$ Documentation$endif$$if(select_tutorials)$ Tutorials$endif$$if(select_gallery)$ Gallery$endif$$if(select_related_projects)$ &ndash; RelatedProjects$endif$</title>
+    <link rel="stylesheet" type="text/css" media="screen" href="stylesheet.css">
+$if(highlighting-css)$
+    <style type="text/css">
+$highlighting-css$
+div.sourceCode { overflow-x: initial; }
+    </style>
+$endif$
+
+$if(select_index)$
+<!-- for teaser carousel -->
+<script src="scripts/jquery.min.js"></script>
+<script src="scripts/popper.min.js"></script>
+<script src="scripts/bootstrap.min.js"></script>
+$endif$
+  </head>
+
+  <body>
+    <div id="header">
+      <div id="header-github">
+        <a id="forkme-banner" href="https://github.com/ospray/OSPRay">View on GitHub</a>
+      </div>
+      <div id="header-title">
+        Intel<sup>&reg;</sup> OSPRay
+      </div>
+
+      <div id="header-navbar">
+        <ul>
+          <li$if(select_index)$ id="selected"$endif$><a href="index.html">Overview</a></li>
+	  <li$if(select_downloads)$ id="selected"$endif$><a href="downloads.html">Downloads</a></li>
+	  <li$if(select_documentation)$ id="selected"$endif$><a href="documentation.html">Documentation</a></li>
+	  <li$if(select_tutorials)$ id="selected"$endif$><a href="tutorials.html">Tutorials</a></li>
+	  <li$if(select_gallery)$ id="selected"$endif$><a href="gallery.html">Gallery</a></li>
+	  <li><a href="https://github.com/ospray/OSPRay/issues">Bugs/Issues</a></li>
+	  <li$if(select_related_projects)$ id="selected"$endif$><a href="related_projects.html">Related Projects</a></li>
+	</ul>
+      </div>
+      <div id="header-spacing"></div>
+    </div>
+$if(toc)$
+<nav id="$idprefix$TOC" role="doc-toc">
+$table-of-contents$
+</nav>
+$endif$
+
+    <div id="content-wrap">
+      <div id="content$if(toc)$-wtoc$endif$">
+
+$body$
+
+      </div>
+    </div>
+
+$if(select_legal)$
+$else$
+      <div id="footer">
+        © 2013 Intel Corporation <a href="legal.html">Disclaimer and Legal Information</a>
+        <a href="https://www.intel.com/privacy">Privacy</a>
+      </div>
+$endif$
+  </body>
+</html>

@@ -2,7 +2,7 @@
 *#
 bin
 *.user*
-build*
+/build*
 install*
 *.sw?
 tags
@@ -23,10 +23,15 @@ ispc
 readme.pdf
 !/modules
 /modules/*
+!/modules/cpu
+!/modules/denoiser
+!/modules/mpi
+!/modules/multiDevice
 !/modules/pluggableGeometryExample
 !/modules/simdGeometryExample
-!/modules/denoiser
 *.vim
 .idea/
 premake.local.*
 cmake-build*/
+.clangd
+compile_commands.json

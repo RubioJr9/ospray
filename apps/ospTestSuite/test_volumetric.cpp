@@ -1,4 +1,4 @@
-// Copyright 2017-2020 Intel Corporation
+// Copyright 2017 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #include "test_volumetric.h"
@@ -127,7 +127,8 @@ void TextureVolumeTransform_deprecated::SetUp()
 
     // Create instance
     cpp::Instance instance(group);
-    instance.setParam("xfm", affine3f::translate(1.25f * vec3f(i.x, i.y, 0.f)));
+    instance.setParam(
+        "transform", affine3f::translate(1.25f * vec3f(i.x, i.y, 0.f)));
     instance.commit();
     AddInstance(instance);
   }
@@ -223,7 +224,8 @@ void TextureVolumeTransform::SetUp()
 
     // Create instance
     cpp::Instance instance(group);
-    instance.setParam("xfm", affine3f::translate(1.25f * vec3f(i.x, i.y, 0.f)));
+    instance.setParam(
+        "transform", affine3f::translate(1.25f * vec3f(i.x, i.y, 0.f)));
     instance.commit();
     AddInstance(instance);
   }
@@ -340,8 +342,16 @@ INSTANTIATE_TEST_SUITE_P(TestScenesVolumes,
                            "unstructured_volume_simple",
                            "particle_volume",
                            "vdb_volume",
+                           "vdb_volume_packed",
                            "gravity_spheres_amr"),
-        ::testing::Values("scivis", "pathtracer", "ao")));
+        ::testing::Values("scivis", "pathtracer", "ao"),
+        ::testing::Values(16)));
+
+INSTANTIATE_TEST_SUITE_P(TestScenesVolumesStrictParams,
+    FromOsprayTesting,
+    ::testing::Values(std::make_tuple("perlin_noise_many_volumes", "scivis", 4),
+        std::make_tuple("perlin_noise_many_volumes", "pathtracer", 32),
+        std::make_tuple("perlin_noise_many_volumes", "ao", 4)));
 
 TEST_P(UnstructuredVolume, simple)
 {

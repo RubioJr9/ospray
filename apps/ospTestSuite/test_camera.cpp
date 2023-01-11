@@ -37,7 +37,7 @@ void Stereo::SetUp()
   }
   camera.setParam("position", pos);
   camera.setParam("stereoMode", stereoMode);
-  camera.commit();
+  camera.setParam("transform", affine3f(one));
 }
 
 // Test Instantiations //////////////////////////////////////////////////////

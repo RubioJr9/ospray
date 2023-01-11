@@ -1,15 +1,18 @@
-// Copyright 2009-2020 Intel Corporation
+// Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 // must be first
 #define OSPRAY_RKCOMMON_DEFINITIONS
 #include "ospray/ospray_cpp/ext/rkcommon.h"
 
+#include "ISPCMessages.h"
 #include "OSPCommon.h"
 #include "api/Device.h"
 
+#include "rkcommon/containers/AlignedVector.h"
 #include "rkcommon/utility/StringManip.h"
 
+#include <cassert>
 #include <map>
 
 namespace ospray {
@@ -23,7 +26,50 @@ extern "C" void *malloc64(size_t size)
 /*! 64-bit malloc. allows for alloc'ing memory larger than 4GB */
 extern "C" void free64(void *ptr)
 {
-  return alignedFree(ptr);
+  alignedFree(ptr);
+}
+
+namespace {
+
+using TLSPool = containers::AlignedVector<uint8_t>;
+thread_local std::vector<TLSPool> tlsStack;
+thread_local size_t topIndex = 0; // TLS stack top index
+} // namespace
+
+extern "C" void *pushTLS(size_t size)
+{
+  // Grow stack
+  topIndex++;
+  if (topIndex > tlsStack.size())
+    tlsStack.resize(topIndex);
+
+  // Grow pool
+  TLSPool &tp = tlsStack[topIndex - 1];
+  tp.resize(size);
+  return tp.data();
+}
+
+extern "C" void *reallocTLS(void *ptr, size_t size)
+{
+  // Silence 'unused variable' warning
+  (void)ptr;
+
+  // Grow pool
+  TLSPool &tp = tlsStack[topIndex - 1];
+  assert(ptr == tp.data());
+  tp.resize(size);
+  return tp.data();
+}
+
+extern "C" void popTLS(void *ptr)
+{
+  // Silence 'unused variable' warning
+  (void)ptr;
+
+  // Lower stack pointer
+  assert(topIndex > 0);
+  assert(ptr == tlsStack[topIndex - 1].data());
+  topIndex--;
 }
 
 WarnOnce::WarnOnce(const std::string &s, uint32_t postAtLogLevel) : s(s)
@@ -98,35 +144,35 @@ void initFromCommandLine(int *_ac, const char ***_av)
     }
 
     for (int i = 1; i < ac;) {
-      std::string parm = av[i];
+      std::string param = av[i];
       // flag-style arguments
-      if (parm == "--osp:debug") {
+      if (param == "--osp:debug") {
         device->setParam("debug", true);
         device->setParam("logOutput", std::string("cout"));
         device->setParam("errorOutput", std::string("cerr"));
         removeArgs(ac, av, i, 1);
-      } else if (parm == "--osp:warn-as-error") {
+      } else if (param == "--osp:warn-as-error") {
         device->setParam("warnAsError", true);
         removeArgs(ac, av, i, 1);
-      } else if (parm == "--osp:verbose") {
+      } else if (param == "--osp:verbose") {
         device->setParam("logLevel", OSP_LOG_INFO);
         device->setParam("logOutput", std::string("cout"));
         device->setParam("errorOutput", std::string("cerr"));
         removeArgs(ac, av, i, 1);
-      } else if (parm == "--osp:vv") {
+      } else if (param == "--osp:vv") {
         device->setParam("logLevel", OSP_LOG_DEBUG);
         device->setParam("logOutput", std::string("cout"));
         device->setParam("errorOutput", std::string("cerr"));
         removeArgs(ac, av, i, 1);
       }
       // arguments taking required values
-      else if (beginsWith(parm, "--osp:log-level")) {
-        std::string str = getArgString(parm);
+      else if (beginsWith(param, "--osp:log-level")) {
+        std::string str = getArgString(param);
         auto level = api::Device::logLevelFromString(str);
         device->setParam("logLevel", level.value_or(0));
         removeArgs(ac, av, i, 1);
-      } else if (beginsWith(parm, "--osp:log-output")) {
-        std::string dst = getArgString(parm);
+      } else if (beginsWith(param, "--osp:log-output")) {
+        std::string dst = getArgString(param);
         if (dst == "cout" || dst == "cerr") {
           device->setParam("logOutput", dst);
         } else {
@@ -136,8 +182,8 @@ void initFromCommandLine(int *_ac, const char ***_av)
           postStatusMsg(ss);
         }
         removeArgs(ac, av, i, 1);
-      } else if (beginsWith(parm, "--osp:error-output")) {
-        std::string dst = getArgString(parm);
+      } else if (beginsWith(param, "--osp:error-output")) {
+        std::string dst = getArgString(param);
         if (dst == "cout" || dst == "cerr") {
           device->setParam("errorOutput", dst);
         } else {
@@ -147,12 +193,12 @@ void initFromCommandLine(int *_ac, const char ***_av)
           postStatusMsg(ss);
         }
         removeArgs(ac, av, i, 1);
-      } else if (beginsWith(parm, "--osp:num-threads")) {
-        int nt = std::max(1, getArgInt(parm));
+      } else if (beginsWith(param, "--osp:num-threads")) {
+        int nt = std::max(1, getArgInt(param));
         device->setParam("numThreads", nt);
         removeArgs(ac, av, i, 1);
-      } else if (beginsWith(parm, "--osp:set-affinity")) {
-        int val = getArgInt(parm);
+      } else if (beginsWith(param, "--osp:set-affinity")) {
+        int val = getArgInt(param);
         if (val == 0 || val == 1) {
           device->setParam<int>("setAffinity", val);
         } else {
@@ -213,8 +259,20 @@ size_t sizeOf(OSPDataType type)
     return sizeof(vec3uc);
   case OSP_VEC4UC:
     return sizeof(vec4uc);
+  case OSP_VEC2C:
+    return sizeof(vec2c);
+  case OSP_VEC3C:
+    return sizeof(vec3c);
+  case OSP_VEC4C:
+    return sizeof(vec4c);
   case OSP_SHORT:
     return sizeof(int16);
+  case OSP_VEC2S:
+    return sizeof(vec2s);
+  case OSP_VEC3S:
+    return sizeof(vec3s);
+  case OSP_VEC4S:
+    return sizeof(vec4s);
   case OSP_USHORT:
     return sizeof(uint16);
   case OSP_VEC2US:
@@ -255,6 +313,14 @@ size_t sizeOf(OSPDataType type)
     return sizeof(vec3ul);
   case OSP_VEC4UL:
     return sizeof(vec4ul);
+  case OSP_HALF:
+    return sizeof(uint16);
+  case OSP_VEC2H:
+    return sizeof(vec2us);
+  case OSP_VEC3H:
+    return sizeof(vec3us);
+  case OSP_VEC4H:
+    return sizeof(vec4us);
   case OSP_FLOAT:
     return sizeof(float);
   case OSP_VEC2F:
@@ -265,6 +331,12 @@ size_t sizeOf(OSPDataType type)
     return sizeof(vec4f);
   case OSP_DOUBLE:
     return sizeof(double);
+  case OSP_VEC2D:
+    return sizeof(vec2d);
+  case OSP_VEC3D:
+    return sizeof(vec3d);
+  case OSP_VEC4D:
+    return sizeof(vec4d);
   case OSP_BOX1I:
     return sizeof(box1i);
   case OSP_BOX2I:
@@ -289,6 +361,8 @@ size_t sizeOf(OSPDataType type)
     return sizeof(affine2f);
   case OSP_AFFINE3F:
     return sizeof(affine3f);
+  case OSP_QUATF:
+    return sizeof(quatf);
   case OSP_UNKNOWN:
     return 0;
   }
@@ -306,16 +380,30 @@ OSPDataType typeOf(const char *string)
     return (OSP_BOOL);
   if (strcmp(string, "char") == 0)
     return (OSP_CHAR);
-  if (strcmp(string, "double") == 0)
-    return (OSP_DOUBLE);
+  if (strcmp(string, "half") == 0)
+    return (OSP_HALF);
   if (strcmp(string, "float") == 0)
     return (OSP_FLOAT);
+  if (strcmp(string, "double") == 0)
+    return (OSP_DOUBLE);
+  if (strcmp(string, "vec2h") == 0)
+    return (OSP_VEC2H);
+  if (strcmp(string, "vec3h") == 0)
+    return (OSP_VEC3H);
+  if (strcmp(string, "vec4h") == 0)
+    return (OSP_VEC4H);
   if (strcmp(string, "vec2f") == 0)
     return (OSP_VEC2F);
   if (strcmp(string, "vec3f") == 0)
     return (OSP_VEC3F);
   if (strcmp(string, "vec4f") == 0)
     return (OSP_VEC4F);
+  if (strcmp(string, "vec2d") == 0)
+    return (OSP_VEC2D);
+  if (strcmp(string, "vec3d") == 0)
+    return (OSP_VEC3D);
+  if (strcmp(string, "vec4d") == 0)
+    return (OSP_VEC4D);
   if (strcmp(string, "int") == 0)
     return (OSP_INT);
   if (strcmp(string, "vec2i") == 0)
@@ -332,8 +420,20 @@ OSPDataType typeOf(const char *string)
     return (OSP_VEC3UC);
   if (strcmp(string, "vec4uc") == 0)
     return (OSP_VEC4UC);
+  if (strcmp(string, "vec2c") == 0)
+    return (OSP_VEC2C);
+  if (strcmp(string, "vec3c") == 0)
+    return (OSP_VEC3C);
+  if (strcmp(string, "vec4c") == 0)
+    return (OSP_VEC4C);
   if (strcmp(string, "short") == 0)
     return (OSP_SHORT);
+  if (strcmp(string, "vec2s") == 0)
+    return (OSP_VEC2S);
+  if (strcmp(string, "vec3s") == 0)
+    return (OSP_VEC3S);
+  if (strcmp(string, "vec4s") == 0)
+    return (OSP_VEC4S);
   if (strcmp(string, "ushort") == 0)
     return (OSP_USHORT);
   if (strcmp(string, "vec2us") == 0)
@@ -410,8 +510,20 @@ std::string stringFor(OSPDataType type)
     return "vec3uc";
   case OSP_VEC4UC:
     return "vec4uc";
+  case OSP_VEC2C:
+    return "vec2c";
+  case OSP_VEC3C:
+    return "vec3c";
+  case OSP_VEC4C:
+    return "vec4c";
   case OSP_SHORT:
     return "short";
+  case OSP_VEC2S:
+    return "vec2s";
+  case OSP_VEC3S:
+    return "vec3s";
+  case OSP_VEC4S:
+    return "vec4s";
   case OSP_USHORT:
     return "ushort";
   case OSP_VEC2US:
@@ -452,6 +564,14 @@ std::string stringFor(OSPDataType type)
     return "vec3ul";
   case OSP_VEC4UL:
     return "vec4ul";
+  case OSP_HALF:
+    return "half";
+  case OSP_VEC2H:
+    return "vec2h";
+  case OSP_VEC3H:
+    return "vec3h";
+  case OSP_VEC4H:
+    return "vec4h";
   case OSP_FLOAT:
     return "float";
   case OSP_VEC2F:
@@ -460,6 +580,12 @@ std::string stringFor(OSPDataType type)
     return "vec3f";
   case OSP_VEC4F:
     return "vec4f";
+  case OSP_VEC2D:
+    return "vec2d";
+  case OSP_VEC3D:
+    return "vec3d";
+  case OSP_VEC4D:
+    return "vec4d";
   case OSP_DOUBLE:
     return "double";
   case OSP_BOX1I:
@@ -486,6 +612,8 @@ std::string stringFor(OSPDataType type)
     return "affine2f";
   case OSP_AFFINE3F:
     return "affine3f";
+  case OSP_QUATF:
+    return "quatf";
   case OSP_UNKNOWN:
     return "unknown";
   }
@@ -578,6 +706,25 @@ size_t sizeOf(OSPTextureFormat format)
   throw std::runtime_error(error.str());
 }
 
+size_t sizeOf(OSPFrameBufferFormat format)
+{
+  size_t bytes = 0;
+
+  switch (format) {
+  case OSP_FB_RGBA8:
+  case OSP_FB_SRGBA:
+    bytes = sizeof(uint32_t);
+    break;
+  case OSP_FB_RGBA32F:
+    bytes = sizeof(vec4f);
+    break;
+  default:
+    break;
+  }
+
+  return bytes;
+}
+
 uint32_t logLevel()
 {
   return ospray::api::Device::current->logLevel;
@@ -621,6 +768,12 @@ StatusMsgStream postStatusMsg(uint32_t postAtLogLevel)
   return StatusMsgStream(postAtLogLevel);
 }
 
+extern "C" void postStatusMsg(uint32_t msgId, uint32_t postAtLogLevel)
+{
+  assert(msgId < ISPC_MSG_MAX);
+  postStatusMsg(ispcMessages[msgId], postAtLogLevel);
+}
+
 void postStatusMsg(const std::stringstream &msg, uint32_t postAtLogLevel)
 {
   postStatusMsg(msg.str(), postAtLogLevel);
@@ -662,7 +815,7 @@ void handleError(OSPError e, const std::string &message)
   } else {
     // NOTE: No device, but something should still get printed for the user to
     //       debug the calling application.
-    std::cerr << "#ospray: INITIALIZATION ERROR --> " << message << std::endl;
+    std::cerr << "#ospray: INVALID device --> " << message << std::endl;
   }
 }
 
@@ -728,6 +881,9 @@ OSPTYPEFOR_DEFINITION(OSPWorld);
 OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC2UC);
 OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC3UC);
 OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC4UC);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC2C);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC3C);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC4C);
 OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC2I);
 OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC3I);
 OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC4I);
@@ -740,9 +896,15 @@ OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC4L);
 OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC2UL);
 OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC3UL);
 OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC4UL);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC2H);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC3H);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC4H);
 OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC2F);
 OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC3F);
 OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC4F);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC2D);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC3D);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC4D);
 OSPDIMENSIONALITYOF_DEFINITION(OSP_BOX1I);
 OSPDIMENSIONALITYOF_DEFINITION(OSP_BOX2I);
 OSPDIMENSIONALITYOF_DEFINITION(OSP_BOX3I);

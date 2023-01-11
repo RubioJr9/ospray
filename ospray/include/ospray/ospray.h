@@ -1,4 +1,4 @@
-// Copyright 2009-2020 Intel Corporation
+// Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -43,7 +43,7 @@
 #define OSP_DEFAULT_VAL(a)
 #endif
 
-// Give OSPRay handle types a concrete defintion to enable C++ type checking
+// Give OSPRay handle types a concrete definition to enable C++ type checking
 #ifdef __cplusplus
 namespace osp {
 struct Device;
@@ -160,7 +160,7 @@ OSPRAY_INTERFACE void ospShutdown();
 
 // Create an OSPRay engine backend using explicit device string.
 OSPRAY_INTERFACE OSPDevice ospNewDevice(
-    const char *deviceType OSP_DEFAULT_VAL("default"));
+    const char *deviceType OSP_DEFAULT_VAL("cpu"));
 
 // Set current device the API responds to
 OSPRAY_INTERFACE void ospSetCurrentDevice(OSPDevice);
@@ -243,13 +243,15 @@ OSPRAY_INTERFACE OSPCamera ospNewCamera(const char *type);
 OSPRAY_INTERFACE OSPGeometry ospNewGeometry(const char *type);
 OSPRAY_INTERFACE OSPVolume ospNewVolume(const char *type);
 
-OSPRAY_INTERFACE OSPGeometricModel ospNewGeometricModel(OSPGeometry);
-OSPRAY_INTERFACE OSPVolumetricModel ospNewVolumetricModel(OSPVolume);
+OSPRAY_INTERFACE OSPGeometricModel ospNewGeometricModel(
+    OSPGeometry OSP_DEFAULT_VAL(NULL));
+OSPRAY_INTERFACE OSPVolumetricModel ospNewVolumetricModel(
+    OSPVolume OSP_DEFAULT_VAL(NULL));
 
 // Model Meta-Data //////////////////////////////////////////////////////////
 
 OSPRAY_INTERFACE OSPMaterial ospNewMaterial(
-    const char *rendererType, const char *materialType);
+    const char * /*ignored*/, const char *materialType);
 
 OSPRAY_INTERFACE OSPTransferFunction ospNewTransferFunction(const char *type);
 
@@ -258,7 +260,7 @@ OSPRAY_INTERFACE OSPTexture ospNewTexture(const char *type);
 // Instancing ///////////////////////////////////////////////////////////////
 
 OSPRAY_INTERFACE OSPGroup ospNewGroup();
-OSPRAY_INTERFACE OSPInstance ospNewInstance(OSPGroup);
+OSPRAY_INTERFACE OSPInstance ospNewInstance(OSPGroup OSP_DEFAULT_VAL(NULL));
 
 // Top-level Worlds /////////////////////////////////////////////////////////
 
@@ -290,7 +292,8 @@ OSPRAY_INTERFACE void ospRetain(OSPObject);
 
 // FrameBuffer Manipulation /////////////////////////////////////////////////
 
-OSPRAY_INTERFACE OSPFrameBuffer ospNewFrameBuffer(int size_x, int size_y,
+OSPRAY_INTERFACE OSPFrameBuffer ospNewFrameBuffer(int size_x,
+    int size_y,
     OSPFrameBufferFormat format OSP_DEFAULT_VAL(OSP_FB_SRGBA),
     uint32_t frameBufferChannels OSP_DEFAULT_VAL(OSP_FB_COLOR));
 

@@ -1,4 +1,4 @@
-// Copyright 2009-2020 Intel Corporation
+// Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #include "DenoiseFrameOp.h"
@@ -73,13 +73,13 @@ struct OSPRAY_MODULE_DENOISER_EXPORT LiveDenoiseFrameOp : public LiveFrameOp
     oidnCommitFilter(filter);
   }
 
-  ~LiveDenoiseFrameOp()
+  ~LiveDenoiseFrameOp() override
   {
     oidnReleaseFilter(filter);
     oidnReleaseDevice(device);
   }
 
-  void process(const Camera *)
+  void process(const Camera *) override
   {
     oidnExecuteFilter(filter);
 

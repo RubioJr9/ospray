@@ -1,4 +1,4 @@
-// Copyright 2009-2020 Intel Corporation
+// Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #include "rkcommon/os/library.h"
@@ -22,13 +22,6 @@ using ospray::api::deviceIsSet;
 /*! \file api.cpp implements the public ospray api functions by
   routing them to a respective \ref device */
 
-inline std::string getPidString()
-{
-  char s[100];
-  sprintf(s, "(pid %i)", getpid());
-  return s;
-}
-
 #define THROW_IF_NULL(obj, name)                                               \
   if (obj == nullptr)                                                          \
   throw std::runtime_error(std::string("null ") + name                         \
@@ -38,14 +31,13 @@ inline std::string getPidString()
 #define THROW_IF_NULL_OBJECT(obj) THROW_IF_NULL(obj, "handle")
 #define THROW_IF_NULL_STRING(str) THROW_IF_NULL(str, "string")
 
-#define ASSERT_DEVICE()                                                        \
-  if (!deviceIsSet())                                                          \
-  throw std::runtime_error(                                                    \
-      "OSPRay not yet initialized "                                            \
-      "(most likely this means you tried to "                                  \
-      "call an ospray API function before "                                    \
-      "first calling ospInit())"                                               \
-      + getPidString())
+#define ASSERT_DEVICE()                                                               \
+  if (!deviceIsSet())                                                                 \
+  throw std::runtime_error(                                                           \
+      "no valid OSPRay device while calling an API function, likely"                  \
+      " either before calling ospInit() / ospNewDevice() plus ospSetCurrentDevice()," \
+      " or after calling ospShutdown() / ospDeviceRelease(); pid: "                   \
+      + std::to_string(getpid()))
 
 #define OSPRAY_CATCH_BEGIN                                                     \
   try {                                                                        \
@@ -144,7 +136,7 @@ extern "C" OSPError ospInit(int *_ac, const char **_av) OSPRAY_CATCH_BEGIN
       auto device_name = OSPRAY_DEVICE.value();
       currentDevice = Device::createDevice(device_name.c_str());
     } else {
-      ospLoadModule("ispc");
+      ospLoadModule("cpu");
       currentDevice = Device::createDevice("cpu");
     }
   }
@@ -184,7 +176,7 @@ extern "C" void ospSetCurrentDevice(OSPDevice _device) OSPRAY_CATCH_BEGIN
 {
   auto *device = (Device *)_device;
 
-  if (!device->isCommitted()) {
+  if ((device) && (!device->isCommitted())) {
     throw std::runtime_error("You must commit the device before using it!");
   }
 
@@ -326,8 +318,6 @@ OSPRAY_CATCH_END()
 
 extern "C" void ospDeviceRelease(OSPDevice _object) OSPRAY_CATCH_BEGIN
 {
-  THROW_IF_NULL_OBJECT(_object);
-
   auto *object = (Device *)_object;
   if (!object)
     return;
@@ -337,8 +327,6 @@ OSPRAY_CATCH_END()
 
 extern "C" void ospDeviceRetain(OSPDevice _object) OSPRAY_CATCH_BEGIN
 {
-  THROW_IF_NULL_OBJECT(_object);
-
   auto *object = (Device *)_object;
   if (!object)
     return;
@@ -346,12 +334,16 @@ extern "C" void ospDeviceRetain(OSPDevice _object) OSPRAY_CATCH_BEGIN
 }
 OSPRAY_CATCH_END()
 
-extern "C" OSPError ospLoadModule(const char *moduleName) OSPRAY_CATCH_BEGIN
+extern "C" OSPError ospLoadModule(const char *module_name) OSPRAY_CATCH_BEGIN
 {
+  std::string moduleName(module_name);
+  if (moduleName == "ispc") // XXX backwards compatibility
+    moduleName = "cpu";
+
   if (deviceIsSet()) {
-    return (OSPError)currentDevice().loadModule(moduleName);
+    return (OSPError)currentDevice().loadModule(moduleName.c_str());
   } else {
-    return loadLocalModule(moduleName);
+    return loadLocalModule(moduleName.c_str());
   }
 }
 OSPRAY_CATCH_END(OSP_UNKNOWN_ERROR)
@@ -445,7 +437,6 @@ OSPRAY_CATCH_END(nullptr)
 extern "C" OSPGeometricModel ospNewGeometricModel(
     OSPGeometry geom) OSPRAY_CATCH_BEGIN
 {
-  THROW_IF_NULL_OBJECT(geom);
   ASSERT_DEVICE();
   OSPGeometricModel instance = currentDevice().newGeometricModel(geom);
   return instance;
@@ -455,7 +446,6 @@ OSPRAY_CATCH_END(nullptr)
 extern "C" OSPVolumetricModel ospNewVolumetricModel(
     OSPVolume volume) OSPRAY_CATCH_BEGIN
 {
-  THROW_IF_NULL_OBJECT(volume);
   ASSERT_DEVICE();
   OSPVolumetricModel instance = currentDevice().newVolumetricModel(volume);
   return instance;
@@ -469,7 +459,6 @@ OSPRAY_CATCH_END(nullptr)
 extern "C" OSPMaterial ospNewMaterial(
     const char *renderer_type, const char *material_type) OSPRAY_CATCH_BEGIN
 {
-  THROW_IF_NULL_STRING(renderer_type);
   THROW_IF_NULL_STRING(material_type);
 
   ASSERT_DEVICE();
@@ -512,7 +501,6 @@ OSPRAY_CATCH_END(nullptr)
 
 extern "C" OSPInstance ospNewInstance(OSPGroup group) OSPRAY_CATCH_BEGIN
 {
-  THROW_IF_NULL_OBJECT(group);
   ASSERT_DEVICE();
   return currentDevice().newInstance(group);
 }
@@ -574,9 +562,9 @@ OSPRAY_CATCH_END()
 
 extern "C" void ospRelease(OSPObject _object) OSPRAY_CATCH_BEGIN
 {
-  ASSERT_DEVICE();
   if (!_object)
     return;
+  ASSERT_DEVICE();
   currentDevice().release(_object);
 }
 OSPRAY_CATCH_END()
@@ -585,8 +573,6 @@ extern "C" void ospRetain(OSPObject _object) OSPRAY_CATCH_BEGIN
 {
   THROW_IF_NULL_OBJECT(_object);
   ASSERT_DEVICE();
-  if (!_object)
-    return;
   currentDevice().retain(_object);
 }
 OSPRAY_CATCH_END()

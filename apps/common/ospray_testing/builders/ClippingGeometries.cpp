@@ -242,7 +242,7 @@ cpp::World ClippingGeometries::buildWorld() const
     group.commit();
 
     cpp::Instance instance(group);
-    instance.setParam("xfm", affine3f::translate(cPos));
+    instance.setParam("transform", affine3f::translate(cPos));
     instance.commit();
 
     inst.push_back(instance);

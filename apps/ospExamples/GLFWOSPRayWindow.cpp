@@ -1,15 +1,18 @@
-// Copyright 2018-2020 Intel Corporation
+// Copyright 2018 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #include "GLFWOSPRayWindow.h"
 #include "imgui_impl_glfw_gl3.h"
 // ospray_testing
 #include "ospray_testing.h"
+#include "rkcommon/utility/random.h"
 // imgui
 #include "imgui.h"
 // std
+#include <algorithm>
 #include <iostream>
 #include <stdexcept>
+#include <vector>
 
 // on Windows often only GL 1.1 headers are present
 #ifndef GL_CLAMP_TO_BORDER
@@ -48,10 +51,12 @@ static const std::vector<std::string> g_scenes = {"boxes_lit",
     "clip_particle_volume",
     "particle_volume",
     "particle_volume_isosurface",
-    "vdb_volume"};
+    "vdb_volume",
+    "vdb_volume_packed",
+    "instancing"};
 
-static const std::vector<std::string> g_curveBasis = {
-    "bspline", "hermite", "catmull-rom", "linear"};
+static const std::vector<std::string> g_curveVariant = {
+    "bspline", "hermite", "catmull-rom", "linear", "cones"};
 
 static const std::vector<std::string> g_renderers = {
     "scivis", "pathtracer", "ao", "debug"};
@@ -71,15 +76,18 @@ static const std::vector<std::string> g_debugRendererTypes = {"eyeLight",
 static const std::vector<std::string> g_pixelFilterTypes = {
     "point", "box", "gaussian", "mitchell", "blackmanHarris"};
 
+static const std::vector<std::string> g_AOVs = {
+    "color", "depth", "albedo", "primID", "objID", "instID"};
+
 bool sceneUI_callback(void *, int index, const char **out_text)
 {
   *out_text = g_scenes[index].c_str();
   return true;
 }
 
-bool curveBasisUI_callback(void *, int index, const char **out_text)
+bool curveVariantUI_callback(void *, int index, const char **out_text)
 {
-  *out_text = g_curveBasis[index].c_str();
+  *out_text = g_curveVariant[index].c_str();
   return true;
 }
 
@@ -98,6 +106,12 @@ bool debugTypeUI_callback(void *, int index, const char **out_text)
 bool pixelFilterTypeUI_callback(void *, int index, const char **out_text)
 {
   *out_text = g_pixelFilterTypes[index].c_str();
+  return true;
+}
+
+bool AOVUI_callback(void *, int index, const char **out_text)
+{
+  *out_text = g_AOVs[index].c_str();
   return true;
 }
 
@@ -257,7 +271,8 @@ void GLFWOSPRayWindow::reshape(const vec2i &newWindowSize)
 
   // create new frame buffer
   auto buffers = OSP_FB_COLOR | OSP_FB_DEPTH | OSP_FB_ACCUM | OSP_FB_ALBEDO
-      | OSP_FB_NORMAL;
+      | OSP_FB_NORMAL | OSP_FB_ID_PRIMITIVE | OSP_FB_ID_OBJECT
+      | OSP_FB_ID_INSTANCE;
   framebuffer =
       cpp::FrameBuffer(windowSize.x, windowSize.y, OSP_FB_RGBA32F, buffers);
 
@@ -280,9 +295,23 @@ void GLFWOSPRayWindow::reshape(const vec2i &newWindowSize)
 void GLFWOSPRayWindow::updateCamera()
 {
   camera.setParam("aspect", windowSize.x / float(windowSize.y));
-  camera.setParam("position", arcballCamera->eyePos());
-  camera.setParam("direction", arcballCamera->lookDir());
-  camera.setParam("up", arcballCamera->upDir());
+  camera.setParam("stereoMode", cameraStereoMode);
+  const auto xfm = arcballCamera->transform();
+  if (rendererType == OSPRayRendererType::PATHTRACER && cameraMotionBlur) {
+    camera.removeParam("transform");
+    std::vector<affine3f> xfms;
+    xfms.push_back(lastXfm);
+    xfms.push_back(xfm);
+    camera.setParam("motion.transform", cpp::CopiedData(xfms));
+    camera.setParam("shutter", range1f(1.0f - cameraMotionBlur, 1.0f));
+    camera.setParam("shutterType", cameraShutterType);
+    camera.setParam("rollingShutterDuration", cameraRollingShutter);
+    renderCameraMotionBlur = true;
+  } else {
+    camera.removeParam("motion.transform");
+    camera.setParam("transform", xfm);
+    camera.setParam("shutter", range1f(0.5f));
+  }
 }
 
 void GLFWOSPRayWindow::motion(const vec2f &position)
@@ -334,8 +363,7 @@ void GLFWOSPRayWindow::display()
 
   updateTitleBar();
 
-  // Turn on SRGB conversion for OSPRay frame
-  glEnable(GL_FRAMEBUFFER_SRGB);
+  glEnable(GL_FRAMEBUFFER_SRGB); // Turn on sRGB conversion for OSPRay frame
 
   static bool firstFrame = true;
   if (firstFrame || currentFrame.isReady()) {
@@ -343,19 +371,69 @@ void GLFWOSPRayWindow::display()
 
     latestFPS = 1.f / currentFrame.duration();
 
-    auto *fb = framebuffer.map(
-        showDepth ? OSP_FB_DEPTH : (showAlbedo ? OSP_FB_ALBEDO : OSP_FB_COLOR));
+    auto fbChannel = OSP_FB_COLOR;
+    if (showDepth)
+      fbChannel = OSP_FB_DEPTH;
+    if (showAlbedo)
+      fbChannel = OSP_FB_ALBEDO;
+    if (showPrimID)
+      fbChannel = OSP_FB_ID_PRIMITIVE;
+    if (showGeomID)
+      fbChannel = OSP_FB_ID_OBJECT;
+    if (showInstID)
+      fbChannel = OSP_FB_ID_INSTANCE;
+    auto *fb = framebuffer.map(fbChannel);
+
+    // Copy and normalize depth layer if showDepth is on
+    float *depthFb = static_cast<float *>(fb);
+    std::vector<float> depthCopy;
+    if (showDepth) {
+      depthCopy.assign(depthFb, depthFb + (windowSize.x * windowSize.y));
+      depthFb = depthCopy.data();
+
+      float minDepth = rkcommon::math::inf;
+      float maxDepth = rkcommon::math::neg_inf;
+
+      for (int i = 0; i < windowSize.x * windowSize.y; i++) {
+        if (std::isinf(depthFb[i]))
+          continue;
+        minDepth = std::min(minDepth, depthFb[i]);
+        maxDepth = std::max(maxDepth, depthFb[i]);
+      }
+      const float rcpDepthRange = 1.f / (maxDepth - minDepth);
+
+      for (int i = 0; i < windowSize.x * windowSize.y; i++) {
+        depthFb[i] = (depthFb[i] - minDepth) * rcpDepthRange;
+      }
+    }
+    unsigned int *ids = static_cast<unsigned int *>(fb);
+    std::vector<vec3f> idFbArray(windowSize.x * windowSize.y);
+    float *idFb = reinterpret_cast<float *>(idFbArray.data());
+    if (showPrimID || showGeomID || showInstID) {
+      for (int i = 0; i < windowSize.x * windowSize.y; i++) {
+        const unsigned int id = ids[i];
+        idFbArray[i] =
+            id == -1u ? vec3f(0.f) : rkcommon::utility::makeRandomColor(id);
+      }
+    }
 
     glBindTexture(GL_TEXTURE_2D, framebufferTexture);
     glTexImage2D(GL_TEXTURE_2D,
         0,
-        showAlbedo ? GL_RGB32F : GL_RGBA32F,
+        showDepth ? GL_DEPTH_COMPONENT
+                  : ((showAlbedo || showPrimID || showGeomID || showInstID)
+                          ? GL_RGB32F
+                          : GL_RGBA32F),
         windowSize.x,
         windowSize.y,
         0,
-        showDepth ? GL_RED : (showAlbedo ? GL_RGB : GL_RGBA),
+        showDepth ? GL_DEPTH_COMPONENT
+                  : ((showAlbedo || showPrimID || showGeomID || showInstID)
+                          ? GL_RGB
+                          : GL_RGBA),
         GL_FLOAT,
-        fb);
+        showDepth ? depthFb
+                  : ((showPrimID || showGeomID || showInstID) ? idFb : fb));
 
     framebuffer.unmap(fb);
 
@@ -385,11 +463,11 @@ void GLFWOSPRayWindow::display()
 
   glEnd();
 
-  // Disable SRGB conversion for UI
-  glDisable(GL_FRAMEBUFFER_SRGB);
-
   if (showUi) {
+    glDisable(GL_FRAMEBUFFER_SRGB); // Disable SRGB conversion for UI
+
     ImGui::Render();
+    ImGui_ImplGlfwGL3_Render();
   }
 
   // swap buffers
@@ -402,7 +480,14 @@ void GLFWOSPRayWindow::startNewOSPRayFrame()
     refreshFrameOperations();
     updateFrameOpsNextFrame = false;
   }
+  lastXfm = arcballCamera->transform();
   currentFrame = framebuffer.renderFrame(*renderer, camera, world);
+  if (renderCameraMotionBlur) {
+    camera.removeParam("motion.transform");
+    camera.setParam("transform", lastXfm);
+    addObjectToCommit(camera.handle());
+    renderCameraMotionBlur = false;
+  }
 }
 
 void GLFWOSPRayWindow::waitOnOSPRayFrame()
@@ -454,13 +539,13 @@ void GLFWOSPRayWindow::buildUI()
   }
 
   if (scene == "curves") {
-    static int whichCurveBasis = 0;
-    if (ImGui::Combo("curveBasis##whichCurveBasis",
-            &whichCurveBasis,
-            curveBasisUI_callback,
+    static int whichCurveVariant = 0;
+    if (ImGui::Combo("curveVariant##whichCurveVariant",
+            &whichCurveVariant,
+            curveVariantUI_callback,
             nullptr,
-            g_curveBasis.size())) {
-      curveBasis = g_curveBasis[whichCurveBasis];
+            g_curveVariant.size())) {
+      curveVariant = g_curveVariant[whichCurveVariant];
       refreshScene(true);
     }
   }
@@ -508,11 +593,28 @@ void GLFWOSPRayWindow::buildUI()
   }
 
   ImGui::Checkbox("cancel frame on interaction", &cancelFrameOnInteraction);
-  ImGui::Checkbox("show depth", &showDepth);
-  if (showDepth)
-    showAlbedo = false;
-  else
-    ImGui::Checkbox("show albedo", &showAlbedo);
+
+  static int whichAOV = 0;
+  if (ImGui::Combo("AOV Display##whichAOV",
+          &whichAOV,
+          AOVUI_callback,
+          nullptr,
+          g_AOVs.size())) {
+    auto aovStr = g_AOVs[whichAOV];
+    showDepth = showAlbedo = showPrimID = showGeomID = showInstID = false;
+    if (aovStr == "depth")
+      showDepth = true;
+    if (aovStr == "albedo")
+      showAlbedo = true;
+    if (aovStr == "primID")
+      showPrimID = true;
+    if (aovStr == "objID")
+      showGeomID = true;
+    if (aovStr == "instID")
+      showInstID = true;
+  }
+
+  ImGui::Separator();
   if (denoiserAvailable) {
     if (ImGui::Checkbox("denoiser", &denoiserEnabled))
       updateFrameOpsNextFrame = true;
@@ -520,7 +622,7 @@ void GLFWOSPRayWindow::buildUI()
 
   ImGui::Separator();
 
-  // the gaussian pixel fiter is the default,
+  // the gaussian pixel filter is the default,
   // which is at position 2 in the list
   static int whichPixelFilter = 2;
   if (ImGui::Combo("pixelfilter##whichPixelFilter",
@@ -561,7 +663,11 @@ void GLFWOSPRayWindow::buildUI()
     addObjectToCommit(renderer->handle());
   }
 
-  if (ImGui::ColorEdit3("backgroundColor", bgColor)) {
+  static vec3f bgColorSRGB{0.0f}; // imGUI's widget implicitly uses sRGB
+  if (ImGui::ColorEdit3("backgroundColor", bgColorSRGB)) {
+    bgColor = vec3f(std::pow(bgColorSRGB.x, 2.2f),
+        std::pow(bgColorSRGB.y, 2.2f),
+        std::pow(bgColorSRGB.z, 2.2f)); // approximate
     rendererPT.setParam("backgroundColor", bgColor);
     rendererSV.setParam("backgroundColor", bgColor);
     rendererAO.setParam("backgroundColor", bgColor);
@@ -585,35 +691,39 @@ void GLFWOSPRayWindow::buildUI()
     addObjectToCommit(renderer->handle());
   }
 
-  if (rendererType == OSPRayRendererType::PATHTRACER) {
-    if (ImGui::Checkbox("renderSunSky", &renderSunSky)) {
-      if (renderSunSky) {
-        sunSky.setParam("direction", sunDirection);
-        world.setParam("light", cpp::CopiedData(sunSky));
-        addObjectToCommit(sunSky.handle());
-      } else {
-        cpp::Light light("ambient");
-        light.setParam("visible", false);
-        light.commit();
-        world.setParam("light", cpp::CopiedData(light));
-      }
+  if (ImGui::Checkbox("renderSunSky", &renderSunSky)) {
+    if (renderSunSky) {
+      sunSky.setParam("direction", sunDirection);
+      world.setParam("light", cpp::CopiedData(sunSky));
+      addObjectToCommit(sunSky.handle());
+    } else {
+      cpp::Light light("ambient");
+      light.setParam("visible", false);
+      light.commit();
+      world.setParam("light", cpp::CopiedData(light));
+    }
+    addObjectToCommit(world.handle());
+  }
+  if (renderSunSky) {
+    if (ImGui::DragFloat3("sunDirection", sunDirection, 0.01f, -1.f, 1.f)) {
+      sunSky.setParam("direction", sunDirection);
+      addObjectToCommit(sunSky.handle());
       addObjectToCommit(world.handle());
     }
-    if (renderSunSky) {
-      if (ImGui::DragFloat3("sunDirection", sunDirection, 0.01f, -1.f, 1.f)) {
-        sunSky.setParam("direction", sunDirection);
-        addObjectToCommit(sunSky.handle());
-      }
-      if (ImGui::DragFloat("turbidity", &turbidity, 0.1f, 1.f, 10.f)) {
-        sunSky.setParam("turbidity", turbidity);
-        addObjectToCommit(sunSky.handle());
-      }
-      if (ImGui::DragFloat(
-              "horizonExtension", &horizonExtension, 0.01f, 0.f, 1.f)) {
-        sunSky.setParam("horizonExtension", horizonExtension);
-        addObjectToCommit(sunSky.handle());
-      }
+    if (ImGui::DragFloat("turbidity", &turbidity, 0.1f, 1.f, 10.f)) {
+      sunSky.setParam("turbidity", turbidity);
+      addObjectToCommit(sunSky.handle());
+      addObjectToCommit(world.handle());
     }
+    if (ImGui::DragFloat(
+            "horizonExtension", &horizonExtension, 0.01f, 0.f, 1.f)) {
+      sunSky.setParam("horizonExtension", horizonExtension);
+      addObjectToCommit(sunSky.handle());
+      addObjectToCommit(world.handle());
+    }
+  }
+
+  if (rendererType == OSPRayRendererType::PATHTRACER) {
     static int maxDepth = 20;
     if (ImGui::SliderInt("maxPathLength", &maxDepth, 1, 64)) {
       renderer->setParam("maxPathLength", maxDepth);
@@ -631,10 +741,50 @@ void GLFWOSPRayWindow::buildUI()
       renderer->setParam("minContribution", minContribution);
       addObjectToCommit(renderer->handle());
     }
+
+    if (ImGui::SliderFloat("camera motion blur", &cameraMotionBlur, 0.f, 1.f)) {
+      updateCamera();
+      addObjectToCommit(camera.handle());
+    }
+
+    if (cameraMotionBlur > 0.0f) {
+      static const char *cameraShutterTypes[] = {"global",
+          "rolling right",
+          "rolling left",
+          "rolling down",
+          "rolling up"};
+      if (ImGui::BeginCombo("shutterType##cameraShutterType",
+              cameraShutterTypes[cameraShutterType])) {
+        for (int n = 0; n < 5; n++) {
+          bool is_selected = (cameraShutterType == n);
+          if (ImGui::Selectable(cameraShutterTypes[n], is_selected))
+            cameraShutterType = (OSPShutterType)n;
+          if (is_selected)
+            ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+      }
+
+      updateCamera();
+      addObjectToCommit(camera.handle());
+    }
+
+    if (cameraShutterType != OSP_SHUTTER_GLOBAL
+        && ImGui::SliderFloat(
+            "rollingShutterDuration", &cameraRollingShutter, 0.f, 1.0f)) {
+      updateCamera();
+      addObjectToCommit(camera.handle());
+    }
   } else if (rendererType == OSPRayRendererType::SCIVIS) {
     static bool shadowsEnabled = false;
     if (ImGui::Checkbox("shadows", &shadowsEnabled)) {
       renderer->setParam("shadows", shadowsEnabled);
+      addObjectToCommit(renderer->handle());
+    }
+
+    static bool visibleLights = false;
+    if (ImGui::Checkbox("visibleLights", &visibleLights)) {
+      renderer->setParam("visibleLights", visibleLights);
       addObjectToCommit(renderer->handle());
     }
 
@@ -669,6 +819,23 @@ void GLFWOSPRayWindow::buildUI()
     }
   }
 
+  static const char *cameraStereoModes[] = {
+      "none", "left", "right", "side-by-side", "top/bottom"};
+  if (ImGui::BeginCombo("camera stereoMode##cameraStereoMode",
+          cameraStereoModes[cameraStereoMode])) {
+    for (int n = 0; n < 5; n++) {
+      bool is_selected = (cameraStereoMode == n);
+      if (ImGui::Selectable(cameraStereoModes[n], is_selected))
+        cameraStereoMode = (OSPStereoMode)n;
+      if (is_selected)
+        ImGui::SetItemDefaultFocus();
+    }
+    ImGui::EndCombo();
+
+    updateCamera();
+    addObjectToCommit(camera.handle());
+  }
+
   if (uiCallback) {
     ImGui::Separator();
     uiCallback();
@@ -692,7 +859,7 @@ void GLFWOSPRayWindow::refreshScene(bool resetCamera)
   auto builder = testing::newBuilder(scene);
   testing::setParam(builder, "rendererType", rendererTypeStr);
   if (scene == "curves") {
-    testing::setParam(builder, "curveBasis", curveBasis);
+    testing::setParam(builder, "curveVariant", curveVariant);
   } else if (scene == "unstructured_volume") {
     testing::setParam(builder, "showCells", showUnstructuredCells);
   }
@@ -730,8 +897,10 @@ void GLFWOSPRayWindow::refreshScene(bool resetCamera)
     // create the arcball camera model
     arcballCamera.reset(
         new ArcballCamera(world.getBounds<box3f>(), windowSize));
+    lastXfm = arcballCamera->transform();
 
     // init camera
+    camera.setParam("position", vec3f(0.0f, 0.0f, 1.0f));
     updateCamera();
     camera.commit();
   }

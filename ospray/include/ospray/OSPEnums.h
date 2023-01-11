@@ -1,11 +1,11 @@
-// Copyright 2009-2020 Intel Corporation
+// Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 // This header is shared with ISPC
 
 #pragma once
 
-// Log levels which can be set on a driver via "logLevel" parameter
+// Log levels which can be set on a device via "logLevel" parameter
 typedef enum
 #if __cplusplus >= 201103L
     : uint32_t
@@ -72,6 +72,9 @@ typedef enum
 
   // Character scalar type.
   OSP_CHAR = 2000,
+  OSP_VEC2C,
+  OSP_VEC3C,
+  OSP_VEC4C,
 
   // Unsigned character scalar and vector types.
   OSP_UCHAR = 2500,
@@ -83,6 +86,9 @@ typedef enum
 
   // Signed 16-bit integer scalar.
   OSP_SHORT = 3000,
+  OSP_VEC2S,
+  OSP_VEC3S,
+  OSP_VEC4S,
 
   // Unsigned 16-bit integer scalar.
   OSP_USHORT = 3500,
@@ -114,6 +120,13 @@ typedef enum
   OSP_VEC3UL,
   OSP_VEC4UL,
 
+  // Half precision floating point scalar and vector types (IEEE 754
+  // `binary16`).
+  OSP_HALF = 5800,
+  OSP_VEC2H,
+  OSP_VEC3H,
+  OSP_VEC4H,
+
   // Single precision floating point scalar and vector types.
   OSP_FLOAT = 6000,
   OSP_VEC2F,
@@ -122,6 +135,9 @@ typedef enum
 
   // Double precision floating point scalar type.
   OSP_DOUBLE = 7000,
+  OSP_VEC2D,
+  OSP_VEC3D,
+  OSP_VEC4D,
 
   // Signed 32-bit integer N-dimensional box types
   OSP_BOX1I = 8000,
@@ -140,6 +156,8 @@ typedef enum
   OSP_LINEAR3F,
   OSP_AFFINE2F,
   OSP_AFFINE3F,
+
+  OSP_QUATF,
 
   // Guard value.
   OSP_UNKNOWN = 9999999
@@ -223,7 +241,10 @@ typedef enum
   OSP_FB_ACCUM = (1 << 2),
   OSP_FB_VARIANCE = (1 << 3),
   OSP_FB_NORMAL = (1 << 4), // in world-space
-  OSP_FB_ALBEDO = (1 << 5)
+  OSP_FB_ALBEDO = (1 << 5),
+  OSP_FB_ID_PRIMITIVE = (1 << 6),
+  OSP_FB_ID_OBJECT = (1 << 7),
+  OSP_FB_ID_INSTANCE = (1 << 8)
 } OSPFrameBufferChannel;
 
 // OSPRay events which can be waited on via ospWait()
@@ -272,9 +293,23 @@ typedef enum
     : uint8_t
 #endif
 {
+  OSP_SHUTTER_GLOBAL,
+  OSP_SHUTTER_ROLLING_RIGHT,
+  OSP_SHUTTER_ROLLING_LEFT,
+  OSP_SHUTTER_ROLLING_DOWN,
+  OSP_SHUTTER_ROLLING_UP,
+  OSP_SHUTTER_UNKNOWN = 255
+} OSPShutterType;
+
+typedef enum
+#if __cplusplus >= 201103L
+    : uint8_t
+#endif
+{
   OSP_ROUND,
   OSP_FLAT,
   OSP_RIBBON,
+  OSP_DISJOINT,
   OSP_UNKNOWN_CURVE_TYPE = 255
 } OSPCurveType;
 
@@ -314,15 +349,26 @@ typedef enum
   OSP_AMR_OCTANT
 } OSPAMRMethod;
 
-// Filter modes that can be set on 'VDB' type OSPVolume, compatible with VKL
+// Filter modes for VDB and structured volumes, compatible with VKL
 typedef enum
 #if __cplusplus >= 201103L
     : uint32_t
 #endif
 {
   OSP_VOLUME_FILTER_NEAREST = 0, // treating voxel cell as constant
-  OSP_VOLUME_FILTER_TRILINEAR = 100 // default trilinear interpolation
+  OSP_VOLUME_FILTER_TRILINEAR = 100, // default trilinear interpolation
+  OSP_VOLUME_FILTER_TRICUBIC = 200 // tricubic interpolation
 } OSPVolumeFilter;
+
+// VDB node data format
+typedef enum
+#if __cplusplus > 201103L
+    : uint32_t
+#endif
+{
+  OSP_VOLUME_FORMAT_TILE = 0, // node with no spatial variation.
+  OSP_VOLUME_FORMAT_DENSE_ZYX // a dense grid of voxels in zyx layout
+} OSPVolumeFormat;
 
 // OSPRay pixel filter types
 typedef enum
@@ -336,3 +382,17 @@ typedef enum
   OSP_PIXELFILTER_MITCHELL,
   OSP_PIXELFILTER_BLACKMAN_HARRIS
 } OSPPixelFilterTypes;
+
+// OSPRay light quantity types
+typedef enum
+#if __cplusplus >= 201103L
+    : uint8_t
+#endif
+{
+  OSP_INTENSITY_QUANTITY_RADIANCE, // unit W/sr/m^2
+  OSP_INTENSITY_QUANTITY_IRRADIANCE, // unit W/m^2
+  OSP_INTENSITY_QUANTITY_INTENSITY, // radiant intensity, unit W/sr
+  OSP_INTENSITY_QUANTITY_POWER, // radiant flux, unit W
+  OSP_INTENSITY_QUANTITY_SCALE, // linear scaling factor for the built-in type
+  OSP_INTENSITY_QUANTITY_UNKNOWN
+} OSPIntensityQuantity;
