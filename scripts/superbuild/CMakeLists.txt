@@ -253,7 +253,7 @@ if (BUILD_OSPRAY_ANARI)
 endif()
 
 if (NOT BUILD_DEPENDENCIES_ONLY)
-  include(build_ospray.cmake)
+  include(build_ospray)
   if (BUILD_OSPRAY_MODULE_MPI)
     include(build_module_mpi.cmake)
   endif()
