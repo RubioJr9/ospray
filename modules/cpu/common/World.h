@@ -35,6 +35,7 @@ struct OSPRAY_SDK_INTERFACE World
   Ref<const DataT<Light *>> lights;
 
   bool scivisDataValid{false};
+  bool sphharmDataValid{false};
   bool pathtracerDataValid{false};
 
   void setDevice(RTCDevice embreeDevice);

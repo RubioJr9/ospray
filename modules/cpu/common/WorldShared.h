@@ -5,6 +5,7 @@
 
 #include "render/pathtracer/PathTracerDataShared.h"
 #include "render/scivis/SciVisDataShared.h"
+#include "render/sh/SphHarmDataShared.h"
 
 #ifdef __cplusplus
 #include "common/StructShared.h"
@@ -23,6 +24,7 @@ struct World
   RTCScene embreeSceneHandleClippers;
 
   SciVisData scivisData;
+  SphHarmData sphharmData;
   PathtracerData pathtracerData;
 
 #ifdef __cplusplus

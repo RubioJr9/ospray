@@ -203,7 +203,7 @@ macro (ispc_compile)
       --addressing=${OSPRAY_ISPC_ADDRESSING}
       ${ISPC_OPT_FLAGS}
       --target=${ISPC_TARGET_ARGS}
-      --opt=fast-math
+      # --opt=fast-math
       ${ISPC_ADDITIONAL_ARGS}
       -h ${ISPC_TARGET_DIR}/${dir}/${fname}_ispc.h
       -MMM  ${outdir}/${fname}.dev.idep

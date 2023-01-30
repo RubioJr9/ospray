@@ -19,6 +19,7 @@ inline void traceGeometryRay(const World *uniform world, varying Ray &ray)
     return;
 
   uniform EmbreeIntersectionContext context;
+  context.userPtr = NULL;
   rtcInitIntersectContext(&context.ectx);
   rtcIntersectV(world->embreeSceneHandleGeometries,
       &context.ectx,

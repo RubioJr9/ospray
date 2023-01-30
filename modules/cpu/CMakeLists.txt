@@ -148,6 +148,13 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   render/scivis/volumes.ispc
   render/scivis/lightAlpha.ispc
 
+  render/sh/SphHarm.cpp
+  render/sh/SphHarm.ispc
+  render/sh/SphHarmData.cpp
+  render/sh/surfaces.ispc
+  render/sh/volumes.ispc
+  render/sh/lightAlpha.ispc
+
   render/pathtracer/PathTracer.ispc
   render/pathtracer/PathTracer.cpp
   render/pathtracer/PathTracerData.cpp

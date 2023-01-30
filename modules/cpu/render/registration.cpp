@@ -5,6 +5,7 @@
 #include "debug/DebugRenderer.h"
 #include "pathtracer/PathTracer.h"
 #include "scivis/SciVis.h"
+#include "sh/SphHarm.h"
 
 #include "materials/Alloy.h"
 #include "materials/CarPaint.h"
@@ -27,6 +28,7 @@ void registerAllRenderers()
   Renderer::registerType<DebugRenderer>("debug");
   Renderer::registerType<PathTracer>("pathtracer");
   Renderer::registerType<SciVis>("scivis");
+  Renderer::registerType<SphHarm>("sphharm");
   Renderer::registerType<AORenderer>("ao");
 }
 

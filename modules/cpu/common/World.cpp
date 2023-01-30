@@ -78,6 +78,7 @@ void World::commit()
   freeAndNullifyEmbreeScene(esClip);
 
   scivisDataValid = false;
+  sphharmDataValid = false;
   pathtracerDataValid = false;
 
   instances = getParamDataT<Instance *>("instance");
