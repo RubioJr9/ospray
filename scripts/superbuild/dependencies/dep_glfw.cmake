@@ -21,7 +21,7 @@ ExternalProject_Add(${COMPONENT_NAME}
   # Git patching approach to work. Also note that we don't want to actually
   # check out the GLFW Git repo, since we want our GLFW_HASH security checks
   # to still function correctly.
-  PATCH_COMMAND git init -q . && git apply -v -p1 < ${CMAKE_SOURCE_DIR}/dependencies/glfw.patch
+  PATCH_COMMAND git init -q . && git apply -v -p1 < ${CMAKE_SOURCE_DIR}/scripts/superbuild/dependencies/glfw.patch
   CMAKE_ARGS
     -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
     -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
